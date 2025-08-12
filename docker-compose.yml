@@ -1,0 +1,21 @@
+name: eventix-api
+services:
+  user-db:
+    image: postgres:14.18
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: user-db
+    ports:
+      - "5432:5432"
+    volumes:
+      - user-db-data:/var/lib/postgresql/data
+    networks:
+      - net
+
+volumes:
+    user-db-data:
+      driver: local
+networks:
+    net:
+      driver: bridge
