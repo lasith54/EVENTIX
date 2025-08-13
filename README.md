@@ -1,6 +1,9 @@
 # 🎟️ Eventix
 
-This repository contains online ticket booking platform, built with FastAPI, SQLAlchemy, and PostgreSQL.
+This repository contains the **Eventix** ticket booking platform, built with FastAPI, SQLAlchemy, and PostgreSQL.  
+It includes both the **User Service** and the **Event Service** for managing users, events, venues, and ticket pricing.
+
+---
 
 ## ⚡ Prerequisites
 
@@ -8,6 +11,8 @@ This repository contains online ticket booking platform, built with FastAPI, SQL
 - 🐳 Docker & Docker Compose
 - 🛢️ PostgreSQL (via Docker)
 - 🛡️ (Recommended) Virtual environment
+
+---
 
 ## 🚀 Setup
 
@@ -52,13 +57,47 @@ This repository contains online ticket booking platform, built with FastAPI, SQL
 
 ## 🏃‍♂️ Running the Service
 
-Start the FastAPI server:
+### 👤 User Service
 
-```sh
-uvicorn main:app --reload
-```
+   Start the FastAPI server:
 
-The API will be available at [http://localhost:8000](http://localhost:8000).
+   ```sh
+   uvicorn main:app --reload
+   ```
+
+   The API will be available at [http://localhost:8000](http://localhost:8000).
+
+### 🎫 Event Service
+
+   Start the FastAPI server for event management:
+
+   ```sh
+   uvicorn main:app --host 0.0.0.0 --port 8002 --reload
+   ```
+
+   The API will be available at [http://localhost:8002](http://localhost:8002).
+
+---
+
+## 🗂️ Project Structure
+
+### User Service
+
+- `main.py` — 🚦 FastAPI entrypoint
+- `database.py` — 🗄️ Database setup
+- `models.py` — 🧩 SQLAlchemy models
+- `auth.py` — 🔐 Authentication routes
+<!-- - `alembic/` — 🛠️ Database migrations -->
+
+### Event Service
+
+- `routes/pricing_routes.py` — 💸 Pricing tier management for events
+- `routes/events_routes.py` — 🎉 Event CRUD operations
+- `routes/venue_routes.py` — 🏟️ Venue and section management
+- `models.py` — 🧩 SQLAlchemy models for events, venues, pricing, etc.
+- `schemas.py` — 📦 Pydantic schemas for request/response validation
+
+---
 
 <!-- ## Useful Commands
 
@@ -75,17 +114,23 @@ The API will be available at [http://localhost:8000](http://localhost:8000).
   alembic upgrade head
   ``` -->
 
-## 🗂️ User Service Structure
+---
 
-- `main.py` — 🚦 FastAPI entrypoint
-- `database.py` — 🗄️ Database setup
-- `models.py` — 🧩 SQLAlchemy models
-- `auth.py` — 🔐 Authentication routes
-<!-- - `alembic/` — 🛠️ Database migrations -->
+## 🎫 Event Service Features
+
+- **Event Management:** Create, update, and list events.
+- **Venue Management:** Manage venues and their sections.
+- **Pricing Tiers:**  
+  - Create pricing tiers for events and venue sections  
+  - Update pricing tiers and seat availability  
+  - Deactivate pricing tiers
+- **Search & Pagination:** Filter and paginate events and pricing tiers.
+
+---
 
 ## Troubleshooting
 
-- Ensure Docker containers are running before running Alembic or the app.
+- Ensure Docker containers are running before running the app.
 <!-- - If you see `KeyError: 'USER_DB_URL'`, check your `.env` file and environment variable setup. -->
 
 ---
