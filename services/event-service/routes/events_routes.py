@@ -3,6 +3,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, and_, or_, func
 from sqlalchemy.orm import selectinload, joinedload
 from typing import List, Optional
+from typing_extensions import Annotated
+from auth import get_current_user, TokenData
 import uuid
 from datetime import datetime
 
@@ -24,12 +26,18 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/events", tags=["events"])
 
-@router.post("/", response_model=MessageResponse, status_code=status.HTTP_201_CREATED)
+@router.post("/", response_model=MessageResponse, status_code=status.HTTP_201_CREATED, dependencies=[Depends(get_current_user)])
 async def create_event(
+    user: Annotated[TokenData, Depends(get_current_user)],
     event_data: EventCreate,
     db: AsyncSession = Depends(get_async_db)
 ):
     """Create a new event with schedules and pricing tiers"""
+    if user.role != "admin":
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Only admins can create categories"
+        )
     # Verify venue exists
     venue_query = select(Venue).where(Venue.id == event_data.venue_id)
     venue_result = await db.execute(venue_query)
@@ -337,12 +345,18 @@ async def get_event(
     return event_response
 
 
-@router.put("/{event_id}", response_model=EventResponse)
+@router.put("/{event_id}", response_model=EventResponse, dependencies=[Depends(get_current_user)])
 async def update_event(
+    user: Annotated[TokenData, Depends(get_current_user)],
     event_id: uuid.UUID,
     event_data: EventUpdate,
     db: AsyncSession = Depends(get_async_db)
 ):
+    if user.role != "admin":
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Only admins can create categories"
+        )
     """Update an event"""
     query = select(Event).where(Event.id == event_id)
     result = await db.execute(query)
@@ -363,11 +377,18 @@ async def update_event(
     return await get_event(event_id, db)
 
 
-@router.delete("/{event_id}", response_model=MessageResponse)
+@router.delete("/{event_id}", response_model=MessageResponse, dependencies=[Depends(get_current_user)])
 async def delete_event(
+    user: Annotated[TokenData, Depends(get_current_user)],
     event_id: uuid.UUID,
     db: AsyncSession = Depends(get_async_db)
 ):
+    if user.role != "admin":
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Only admins can create categories"
+        )
+    
     """Delete an event (set status to cancelled)"""
     query = select(Event).where(Event.id == event_id)
     result = await db.execute(query)

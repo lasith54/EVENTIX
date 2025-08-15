@@ -2,7 +2,8 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, and_, or_, func
 from sqlalchemy.orm import selectinload, joinedload
-from typing import List, Optional
+from typing import List, Optional, Annotated
+from auth import get_current_user, TokenData
 import uuid
 from datetime import datetime
 import logging
@@ -23,11 +24,18 @@ from schemas import (
 
 router = APIRouter(prefix="/venues", tags=["venues"])
 
-@router.post("/", response_model=MessageResponse, status_code=status.HTTP_201_CREATED)
+@router.post("/", response_model=MessageResponse, status_code=status.HTTP_201_CREATED, dependencies=[Depends(get_current_user)])
 async def create_venue(
+    user: Annotated[TokenData, Depends(get_current_user)],
     venue_data: VenueCreate,
     db: AsyncSession = Depends(get_async_db)
 ):
+    if user.role != "admin":
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Only admins can create categories"
+        )
+    
     """Create a new venue"""
     venue = Venue(**venue_data.model_dump())
     db.add(venue)
@@ -86,12 +94,19 @@ async def get_venue(
     return venue
 
 
-@router.put("/{venue_id}", response_model=MessageResponse)
+@router.put("/{venue_id}", response_model=MessageResponse, dependencies=[Depends(get_current_user)])
 async def update_venue(
+    user: Annotated[TokenData, Depends(get_current_user)],
     venue_id: uuid.UUID,
     venue_data: VenueUpdate,
     db: AsyncSession = Depends(get_async_db)
 ):
+    if user.role != "admin":
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Only admins can create categories"
+        )
+    
     """Update a venue"""
     query = select(Venue).where(Venue.id == venue_id)
     result = await db.execute(query)
@@ -116,11 +131,18 @@ async def update_venue(
     return MessageResponse(message="Venue Updated Successfully.")
 
 
-@router.delete("/{venue_id}", response_model=MessageResponse)
+@router.delete("/{venue_id}", response_model=MessageResponse, dependencies=[Depends(get_current_user)])
 async def delete_venue(
+    user: Annotated[TokenData, Depends(get_current_user)],
     venue_id: uuid.UUID,
     db: AsyncSession = Depends(get_async_db)
 ):
+    if user.role != "admin":
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Only admins can create categories"
+        )
+    
     """Delete a venue (soft delete by setting is_active to False)"""
     query = select(Venue).where(Venue.id == venue_id)
     result = await db.execute(query)
@@ -137,12 +159,19 @@ async def delete_venue(
     return MessageResponse(message="Venue deleted successfully")
 
 
-@router.post("/{venue_id}/sections", response_model=VenueSectionResponse, status_code=status.HTTP_201_CREATED)
+@router.post("/{venue_id}/sections", response_model=VenueSectionResponse, status_code=status.HTTP_201_CREATED, dependencies=[Depends(get_current_user)])
 async def create_venue_section(
+    user: Annotated[TokenData, Depends(get_current_user)],
     venue_id: uuid.UUID,
     section_data: VenueSectionCreate,
     db: AsyncSession = Depends(get_async_db)
 ):
+    if user.role != "admin":
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Only admins can create categories"
+        )
+    
     """Create a new section for a venue"""
     # Verify venue exists
     venue_query = select(Venue).where(Venue.id == venue_id)

@@ -2,7 +2,8 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, and_, or_, func
 from sqlalchemy.orm import selectinload, joinedload
-from typing import List, Optional
+from typing import List, Optional, Annotated
+from auth import get_current_user, TokenData
 import uuid
 from datetime import datetime, timezone
 
@@ -30,12 +31,19 @@ def make_datetime_naive_utc(dt: Optional[datetime]) -> Optional[datetime]:
         return dt.astimezone(timezone.utc).replace(tzinfo=None)
     return dt
 
-@router.post("/{event_id}/pricing", response_model=EventPricingTierResponse, status_code=status.HTTP_201_CREATED)
+@router.post("/{event_id}/pricing", response_model=EventPricingTierResponse, status_code=status.HTTP_201_CREATED, dependencies=[Depends(get_current_user)])
 async def create_pricing_tier(
+    user: Annotated[TokenData, Depends(get_current_user)],
     event_id: uuid.UUID,
     pricing_data: EventPricingTierCreate,
     db: AsyncSession = Depends(get_async_db)
 ):
+    if user.role != "admin":
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Only admins can create categories"
+        )
+    
     """Create a new pricing tier for an event"""
     # Verify event exists
     event_query = select(Event).where(Event.id == event_id)
@@ -87,12 +95,19 @@ async def create_pricing_tier(
     return pricing_with_section
 
 
-@router.put("/pricing/{pricing_id}", response_model=EventPricingTierResponse)
+@router.put("/pricing/{pricing_id}", response_model=EventPricingTierResponse, dependencies=[Depends(get_current_user)])
 async def update_pricing_tier(
+    user: Annotated[TokenData, Depends(get_current_user)],
     pricing_id: uuid.UUID,
     pricing_data: EventPricingTierUpdate,
     db: AsyncSession = Depends(get_async_db)
 ):
+    if user.role != "admin":
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Only admins can create categories"
+        )
+    
     """Update a pricing tier"""
     query = select(EventPricingTier).where(EventPricingTier.id == pricing_id)
     result = await db.execute(query)
@@ -143,11 +158,18 @@ async def update_pricing_tier(
     return updated_pricing_tier
 
 
-@router.delete("/pricing/{pricing_id}", response_model=MessageResponse)
+@router.delete("/pricing/{pricing_id}", response_model=MessageResponse, dependencies=[Depends(get_current_user)])
 async def delete_pricing_tier(
+    user: Annotated[TokenData, Depends(get_current_user)],
     pricing_id: uuid.UUID,
     db: AsyncSession = Depends(get_async_db)
 ):
+    if user.role != "admin":
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Only admins can create categories"
+        )
+    
     """Deactivate a pricing tier"""
     query = select(EventPricingTier).where(EventPricingTier.id == pricing_id)
     result = await db.execute(query)

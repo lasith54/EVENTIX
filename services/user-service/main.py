@@ -6,15 +6,39 @@ from typing import Annotated
 from sqlalchemy.orm import Session
 from contextlib import asynccontextmanager
 from database import engine, SessionLocal
+from admin import create_admin_user
 import logging
 import auth
 import time
 
 from config import settings
 
-app = FastAPI()
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """
+    Handles application startup and shutdown events.
+    """
 
-models.Base.metadata.create_all(engine)
+    models.Base.metadata.create_all(bind=engine)
+    
+    # Create a separate session for the startup task
+    db = SessionLocal()
+    try:
+        create_admin_user(
+            db,
+            admin_email="admin@eventix.com",
+            admin_password="admin",
+            admin_first_name="Admin",
+            admin_last_name="User"
+        )
+    finally:
+        db.close()
+    
+    yield
+    
+    print("Application shutting down...")
+
+app = FastAPI(lifespan=lifespan)
 
 def get_db():
     db = SessionLocal()

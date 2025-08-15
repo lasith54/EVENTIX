@@ -2,7 +2,8 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, and_, or_, func
 from sqlalchemy.orm import selectinload, joinedload
-from typing import List, Optional
+from typing import List, Optional, Annotated
+from auth import get_current_user, TokenData
 import uuid
 from datetime import datetime, timezone
 
@@ -32,12 +33,19 @@ def make_datetime_naive_utc(dt: Optional[datetime]) -> Optional[datetime]:
         return dt.astimezone(timezone.utc).replace(tzinfo=None)
     return dt
 
-@router.post("/{event_id}/schedules", response_model=EventScheduleResponse, status_code=status.HTTP_201_CREATED)
+@router.post("/{event_id}/schedules", response_model=EventScheduleResponse, status_code=status.HTTP_201_CREATED, dependencies=[Depends(get_current_user)])
 async def create_schedule(
+    user: Annotated[TokenData, Depends(get_current_user)],
     event_id: uuid.UUID,
     schedule_data: EventScheduleCreate,
     db: AsyncSession = Depends(get_async_db)
 ):
+    if user.role != "admin":
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Only admins can create categories"
+        )
+    
     """Create a new schedule for an event"""
     # Verify event exists
     event_query = select(Event).where(Event.id == event_id)
@@ -62,12 +70,19 @@ async def create_schedule(
     return schedule
 
 
-@router.put("/schedules/{schedule_id}", response_model=EventScheduleResponse)
+@router.put("/schedules/{schedule_id}", response_model=EventScheduleResponse, dependencies=[Depends(get_current_user)])
 async def update_schedule(
+    user: Annotated[TokenData, Depends(get_current_user)],
     schedule_id: uuid.UUID,
     schedule_data: EventScheduleUpdate,
     db: AsyncSession = Depends(get_async_db)
 ):
+    if user.role != "admin":
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Only admins can create categories"
+        )
+    
     """Update an event schedule"""
     query = select(EventSchedule).where(EventSchedule.id == schedule_id)
     result = await db.execute(query)
@@ -94,11 +109,18 @@ async def update_schedule(
     return schedule
 
 
-@router.delete("/schedules/{schedule_id}", response_model=MessageResponse)
+@router.delete("/schedules/{schedule_id}", response_model=MessageResponse, dependencies=[Depends(get_current_user)])
 async def delete_schedule(
+    user: Annotated[TokenData, Depends(get_current_user)],
     schedule_id: uuid.UUID,
     db: AsyncSession = Depends(get_async_db)
 ):
+    if user.role != "admin":
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Only admins can create categories"
+        )
+    
     """Cancel a schedule"""
     query = select(EventSchedule).where(EventSchedule.id == schedule_id)
     result = await db.execute(query)

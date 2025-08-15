@@ -26,6 +26,19 @@ services:
     networks:
       - net
 
+  # inventory-db:
+  #   image: postgres:14.18
+  #   environment:
+  #     POSTGRES_USER: postgres
+  #     POSTGRES_PASSWORD: postgres
+  #     POSTGRES_DB: inventory-db
+  #   ports:
+  #     - "5434:5432"
+  #   volumes:
+  #     - event-db-data:/var/lib/postgresql/data
+  #   networks:
+  #     - net
+
 volumes:
     user-db-data:
       driver: local

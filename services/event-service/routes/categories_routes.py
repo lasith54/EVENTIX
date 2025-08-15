@@ -1,8 +1,10 @@
 from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi.security import HTTPBearer
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, and_, or_, func
 from sqlalchemy.orm import selectinload, joinedload
-from typing import List, Optional
+from typing import List, Optional, Annotated
+from auth import get_current_user, TokenData
 import uuid
 from datetime import datetime
 import logging
@@ -23,13 +25,19 @@ from schemas import (
 
 router = APIRouter(prefix="/categories", tags=["categories"])
 
-@router.post("/", response_model=MessageResponse, status_code=status.HTTP_201_CREATED)
+@router.post("/", response_model=MessageResponse, status_code=status.HTTP_201_CREATED, dependencies=[Depends(get_current_user)])
 async def create_category(
+    user: Annotated[TokenData, Depends(get_current_user)],
     category_data: EventCategoryCreate,
-    db: AsyncSession = Depends(get_async_db)
+    db: AsyncSession = Depends(get_async_db),
 ):
     """Create a new event category"""
-    # Check if parent exists if parent_id is provided
+    print(f"User ID: {user.user_id}, Role: {user.role}")
+    if user.role != "admin":
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Only admins can create categories"
+        )
     if category_data.parent_id:
         parent_query = select(EventCategory).where(EventCategory.id == category_data.parent_id)
         parent_result = await db.execute(parent_query)
@@ -117,13 +125,19 @@ async def get_category(
     return category_dict
 
 
-@router.put("/{category_id}", response_model=MessageResponse)
+@router.put("/{category_id}", response_model=MessageResponse, dependencies=[Depends(get_current_user)])
 async def update_category(
+    user: Annotated[TokenData, Depends(get_current_user)],
     category_id: uuid.UUID,
     category_data: EventCategoryUpdate,
     db: AsyncSession = Depends(get_async_db)
 ):
     """Update a category"""
+    if user.role != "admin":
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Only admins can create categories"
+        )
     query = select(EventCategory).where(EventCategory.id == category_id)
     result = await db.execute(query)
     category = result.scalar_one_or_none()
