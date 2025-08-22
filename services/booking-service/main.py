@@ -1,44 +1,20 @@
 import models
-from fastapi import FastAPI, Request, status, Depends, HTTPException
+from fastapi import FastAPI, Request, status, Depends, HTTPException, APIRouter
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from typing import Annotated
 from sqlalchemy.orm import Session
 from contextlib import asynccontextmanager
 from database import engine, SessionLocal
-from admin import create_admin_user
 import logging
-from routes import (auth, preference_routes, notification_routes, session_routes)
+from routes import booking_routes, saga_routes
 import time
 
 from config import settings
 
-@asynccontextmanager
-async def lifespan(app: FastAPI):
-    """
-    Handles application startup and shutdown events.
-    """
+app = FastAPI()
 
-    models.Base.metadata.create_all(bind=engine)
-    
-    # Create a separate session for the startup task
-    db = SessionLocal()
-    try:
-        create_admin_user(
-            db,
-            admin_email="admin@eventix.com",
-            admin_password="admin",
-            admin_first_name="Admin",
-            admin_last_name="User"
-        )
-    finally:
-        db.close()
-    
-    yield
-    
-    print("Application shutting down...")
-
-app = FastAPI(lifespan=lifespan)
+models.Base.metadata.create_all(engine)
 
 def get_db():
     db = SessionLocal()
@@ -62,10 +38,10 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-app.include_router(auth.router)
-app.include_router(preference_routes.router)
-app.include_router(notification_routes.router)
-app.include_router(session_routes.router)
+api_router = APIRouter(prefix="/api/v1")
+app.include_router(booking_routes.router)
+app.include_router(saga_routes.router)
+app.include_router(api_router)
 
 # Request logging middleware
 @app.middleware("http")

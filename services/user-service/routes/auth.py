@@ -1,6 +1,6 @@
 from datetime import timedelta, datetime
 from typing import Annotated
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel, EmailStr, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.exc import SQLAlchemyError
@@ -29,6 +29,14 @@ ALGORITHM = 'HS256'
 
 bcrypt_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 oauth2_bearer = OAuth2PasswordBearer(tokenUrl="auth/login")
+
+def get_client_info(request: Request) -> dict:
+    """Extract client information from request"""
+    return {
+        "ip_address": request.client.host if request.client else None,
+        "user_agent": request.headers.get("user-agent", ""),
+        "device_info": request.headers.get("x-device-info", "Unknown Device")
+    }
 
 @router.post('/register', status_code=status.HTTP_201_CREATED)
 async def create_user(db: async_db_dependency, 
@@ -280,6 +288,7 @@ async def change_password(
         )
     
     user.hashed_password = bcrypt_context.hash(password_data.new_password)
+    user.updated_at = datetime.utcnow()
     await db.commit()
     
     logger.info(f"Password changed successfully for user: {user.email}")

@@ -7,7 +7,8 @@ from sqlalchemy.orm import Session
 from contextlib import asynccontextmanager
 from database import engine, SessionLocal
 import logging
-from routes import events_routes, categories_routes, schedules_routes, pricing_routes, venue_routes
+from routes import( events_routes, categories_routes, schedules_routes, pricing_routes, venue_routes,
+                   utility_routes, seat_management_routes, seat_reservation_routes)
 import time
 
 from config import settings
@@ -44,6 +45,9 @@ api_router.include_router(categories_routes.router)
 api_router.include_router(schedules_routes.router)
 api_router.include_router(pricing_routes.router)
 api_router.include_router(venue_routes.router)
+api_router.include_router(seat_management_routes.router)
+api_router.include_router(seat_reservation_routes.router)
+api_router.include_router(utility_routes.router)
 app.include_router(api_router)
 
 # Request logging middleware
