@@ -1,0 +1,54 @@
+.profile-page {
+  padding: 20px 0;
+  min-height: 100vh;
+}
+
+.profile-page h1 {
+  text-align: center;
+  margin-bottom: 40px;
+  color: #333;
+}
+
+.profile-section {
+  background: white;
+  padding: 30px;
+  border-radius: 10px;
+  box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+  margin-bottom: 30px;
+}
+
+.profile-section h2 {
+  margin-bottom: 20px;
+  color: #333;
+  border-bottom: 2px solid #3498db;
+  padding-bottom: 10px;
+}
+
+.profile-info {
+  display: flex;
+  flex-direction: column;
+  gap: 15px;
+}
+
+.info-item {
+  display: flex;
+  gap: 10px;
+}
+
+.info-item label {
+  font-weight: bold;
+  color: #666;
+  min-width: 80px;
+}
+
+.info-item span {
+  color: #333;
+}
+
+.bookings-placeholder {
+  text-align: center;
+  padding: 40px;
+  color: #666;
+  background: #f8f9fa;
+  border-radius: 5px;
+}

@@ -1,0 +1,130 @@
+.event-details {
+  padding: 20px 0;
+}
+
+.event-header {
+  display: grid;
+  grid-template-columns: 300px 1fr;
+  gap: 40px;
+  margin-bottom: 40px;
+}
+
+.event-poster {
+  width: 100%;
+  border-radius: 10px;
+}
+
+.event-info h1 {
+  font-size: 32px;
+  margin-bottom: 10px;
+  color: #333;
+}
+
+.event-type {
+  background: #3498db;
+  color: white;
+  padding: 5px 15px;
+  border-radius: 20px;
+  display: inline-block;
+  margin-bottom: 20px;
+  font-size: 14px;
+}
+
+.event-description {
+  color: #666;
+  line-height: 1.6;
+  margin-bottom: 30px;
+}
+
+.event-meta {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.meta-item {
+  font-size: 16px;
+}
+
+.schedules-section {
+  margin-bottom: 40px;
+}
+
+.schedules-section h2 {
+  margin-bottom: 20px;
+  color: #333;
+}
+
+.schedules-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 15px;
+}
+
+.schedule-card {
+  background: white;
+  border: 2px solid #ddd;
+  border-radius: 10px;
+  padding: 15px;
+  text-align: center;
+  cursor: pointer;
+  transition: all 0.3s ease;
+}
+
+.schedule-card:hover {
+  border-color: #3498db;
+}
+
+.schedule-card.selected {
+  border-color: #3498db;
+  background: #f8f9fa;
+}
+
+.schedule-date {
+  font-weight: bold;
+  margin-bottom: 5px;
+}
+
+.schedule-time {
+  color: #666;
+  margin-bottom: 10px;
+}
+
+.schedule-status {
+  font-size: 12px;
+  padding: 5px 10px;
+  border-radius: 15px;
+  background: #27ae60;
+  color: white;
+}
+
+.booking-section {
+  text-align: center;
+}
+
+.book-now-btn {
+  background: #27ae60;
+  color: white;
+  padding: 15px 40px;
+  border: none;
+  border-radius: 5px;
+  font-size: 18px;
+  cursor: pointer;
+  transition: background 0.3s ease;
+}
+
+.book-now-btn:hover:not(:disabled) {
+  background: #229954;
+}
+
+.book-now-btn:disabled {
+  background: #bdc3c7;
+  cursor: not-allowed;
+}
+
+@media (max-width: 768px) {
+  .event-header {
+    grid-template-columns: 1fr;
+    gap: 20px;
+  }
+}
