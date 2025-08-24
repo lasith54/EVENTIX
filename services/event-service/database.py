@@ -4,10 +4,10 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 from fastapi import Depends
 
-engine = create_engine('postgresql+psycopg2://postgres:postgres@localhost:5433/event-db', echo=True, future=True)
+engine = create_engine('postgresql+psycopg2://postgres:postgres@event-db:5432/event-db', echo=True, future=True)
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
-async_engine = create_async_engine('postgresql+asyncpg://postgres:postgres@localhost:5433/event-db', echo=True, future=True)
+async_engine = create_async_engine('postgresql+asyncpg://postgres:postgres@event-db:5432/event-db', echo=True, future=True)
 
 AsyncSessionLocal = async_sessionmaker(async_engine, class_=AsyncSession, expire_on_commit=False)
 

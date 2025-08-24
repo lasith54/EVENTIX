@@ -1,7 +1,7 @@
 # 🎟️ Eventix
 
-This repository contains the **Eventix** ticket booking platform, built with FastAPI, SQLAlchemy, and PostgreSQL.  
-It includes both the **User Service** and the **Event Service** for managing users, events, venues, and ticket pricing.
+A comprehensive **microservices-based ticket booking platform** built with FastAPI, SQLAlchemy, and PostgreSQL.  
+The system includes **User Service**, **Event Service**, **Booking Service**, and **Payment Service** for complete ticket management.
 
 ---
 
@@ -57,74 +57,107 @@ It includes both the **User Service** and the **Event Service** for managing use
 
 ## 🏃‍♂️ Running the Service
 
-### 👤 User Service
+### 2️⃣ Start All Services
+```bash
+# Build and start all services
+docker-compose up --build -d
+```
 
-   Start the FastAPI server:
+**Start services locally:**
+```bash
+# Terminal 1 - User Service
+cd services/user-service
+uvicorn main:app --host 0.0.0.0 --port 8000 --reload
 
-   ```sh
-   uvicorn main:app --reload
-   ```
+# Terminal 2 - Event Service  
+cd services/event-service
+uvicorn main:app --host 0.0.0.0 --port 8001 --reload
 
-   The API will be available at [http://localhost:8000](http://localhost:8000).
+# Terminal 3 - Booking Service
+cd services/booking-service
+uvicorn main:app --host 0.0.0.0 --port 8002 --reload
 
-### 🎫 Event Service
-
-   Start the FastAPI server for event management:
-
-   ```sh
-   uvicorn main:app --host 0.0.0.0 --port 8002 --reload
-   ```
-
-   The API will be available at [http://localhost:8002](http://localhost:8002).
+# Terminal 4 - Payment Service
+cd services/payment-service
+uvicorn main:app --host 0.0.0.0 --port 8003 --reload
+```
 
 ---
 
 ## 🗂️ Project Structure
 
-### User Service
-
-- `main.py` — 🚦 FastAPI entrypoint
-- `database.py` — 🗄️ Database setup
-- `models.py` — 🧩 SQLAlchemy models
-- `auth.py` — 🔐 Authentication routes
-<!-- - `alembic/` — 🛠️ Database migrations -->
-
-### Event Service
-
-- `routes/pricing_routes.py` — 💸 Pricing tier management for events
-- `routes/events_routes.py` — 🎉 Event CRUD operations
-- `routes/venue_routes.py` — 🏟️ Venue and section management
-- `models.py` — 🧩 SQLAlchemy models for events, venues, pricing, etc.
-- `schemas.py` — 📦 Pydantic schemas for request/response validation
+```
+eventix/
+├── 📁 services/
+│   ├── 📁 user-service/
+│   │   ├── main.py              # 🚦 FastAPI app & authentication
+│   │   ├── models.py            # 🧩 User, preferences, sessions
+│   │   ├── database.py          # 🗄️ Database setup
+│   │   ├── auth_utils.py        # 🔐 JWT & password utilities
+│   │   ├── admin.py             # 👑 Admin user creation
+│   │   └── requirements.txt     # 📦 Python dependencies
+│   │
+│   ├── 📁 event-service/
+│   │   ├── main.py              # 🎫 Event management API
+│   │   ├── models.py            # 🧩 Events, venues, pricing
+│   │   ├── schemas.py           # 📝 Pydantic models
+│   │   └── requirements.txt     # 📦 Dependencies
+│   │
+│   ├── 📁 booking-service/
+│   │   ├── main.py              # 📝 Booking management
+│   │   ├── models.py            # 🧩 Bookings, seats, history
+│   │   ├── schemas.py           # 📝 Booking schemas
+│   │   └── requirements.txt     # 📦 Dependencies
+│   │
+│   └── 📁 payment-service/
+│       ├── main.py              # 💳 Payment processing
+│       ├── models.py            # 🧩 Payments, transactions
+│       ├── schemas.py           # 📝 Payment schemas
+│       └── requirements.txt     # 📦 Dependencies
+│
+├── docker-compose.yml           # 🐳 Full system orchestration
+├── start-eventix.sh             # 🚀 Startup script
+└── README.md                    # 📚 This file
+```
 
 ---
 
-<!-- ## Useful Commands
+## 🎯 Core Features
 
-- **Run tests:**  
-  ```sh
-  pytest
-  ```
-- **Generate a new Alembic migration:**  
-  ```sh
-  alembic revision --autogenerate -m "Migration message"
-  ```
-- **Upgrade database:**  
-  ```sh
-  alembic upgrade head
-  ``` -->
+### 👤 User Service (Port 8000)
+- **Authentication**: JWT-based login/registration
+- **User Management**: Profile, preferences, sessions
+- **Admin Panel**: Admin user creation and management
+- **Email Notifications**: Booking confirmations, receipts
+
+### 🎫 Event Service (Port 8001)
+- **Event Management**: Create, update, list events
+- **Venue Management**: Venues with seating sections
+- **Pricing Tiers**: Multiple pricing levels per event
+- **Seat Management**: Real-time availability tracking
+- **Admin Panel**: Full event administration
+
+### 📝 Booking Service (Port 8002)  
+- **Seat Reservation**: Temporary holds during booking
+- **Booking Management**: Create, confirm, cancel bookings
+- **Booking History**: Complete audit trail
+- **Timeout Handling**: Auto-release expired reservations
+
+### 💳 Payment Service (Port 8003)
+- **Payment Processing**: Multiple gateway support
+- **Transaction Logging**: Complete payment history
+- **Refund Management**: Full and partial refunds
+- **Payment Status**: Real-time payment tracking
 
 ---
 
-## 🎫 Event Service Features
+## 🔐 Default Admin Access
 
-- **Event Management:** Create, update, and list events.
-- **Venue Management:** Manage venues and their sections.
-- **Pricing Tiers:**  
-  - Create pricing tiers for events and venue sections  
-  - Update pricing tiers and seat availability  
-  - Deactivate pricing tiers
-- **Search & Pagination:** Filter and paginate events and pricing tiers.
+**Admin Login:**
+- **Email**: `admin@eventix.com`
+- **Password**: `admin123`
+
+The admin user is automatically created when the user service starts.
 
 ---
 
