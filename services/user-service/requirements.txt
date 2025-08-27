@@ -11,3 +11,4 @@ pydantic-settings==2.1.0
 python-dotenv==1.0.0
 asyncpg==0.29.0
 dotenv==0.9.9
+aio-pika==9.5.7

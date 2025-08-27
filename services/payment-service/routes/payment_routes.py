@@ -1,3 +1,7 @@
+import sys
+import os
+sys.path.append(os.path.join(os.path.dirname(__file__), '..', '..', '..'))
+
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 from typing import List
@@ -13,7 +17,10 @@ from schemas import (
 )
 from auth import get_current_user, TokenData
 
+from shared.event_publisher import EventPublisher
+
 router = APIRouter(prefix="/payments", tags=["Payments"])
+event_publisher = EventPublisher("payment-service")
 
 @router.post("/", response_model=PaymentResponse, status_code=status.HTTP_201_CREATED)
 async def create_payment(
@@ -29,6 +36,17 @@ async def create_payment(
     db.add(payment)
     await db.commit()
     await db.refresh(payment)
+
+    await event_publisher.publish_payment_event("completed", {
+        "payment_id": payment.id,
+        "booking_id": payment_data.get("booking_id"),
+        "payment_method_id": payment_data.get("payment_method_id"),
+        "user_id": current_user.user_id,
+        "amount": payment_data.get("amount"),
+        "description": payment_data.get("description"),
+        "status": "completed"
+    })
+
     return payment
 
 @router.get("/{payment_id}", response_model=PaymentResponse)

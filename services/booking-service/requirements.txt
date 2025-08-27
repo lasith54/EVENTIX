@@ -13,3 +13,4 @@ pillow==10.1.0
 httpx==0.25.2
 slowapi==0.1.9
 redis==5.0.1
+aio-pika==9.5.7

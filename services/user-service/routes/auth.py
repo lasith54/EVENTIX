@@ -1,3 +1,7 @@
+import sys
+import os
+sys.path.append(os.path.join(os.path.dirname(__file__), '..', '..', '..'))
+
 from datetime import timedelta, datetime
 from typing import Annotated
 from fastapi import APIRouter, Depends, HTTPException, Request
@@ -15,7 +19,11 @@ from database import get_async_db
 from auth_handler import get_current_user, TokenData
 import logging
 
+from shared.event_publisher import EventPublisher
+
 logger = logging.getLogger(__name__)
+
+event_publisher = EventPublisher("user-service")
 
 router = APIRouter(
     prefix='/auth',
@@ -73,6 +81,13 @@ async def create_user(db: async_db_dependency,
         user_profile = UserProfile(user_id=create_user_model.id)
         db.add(user_profile)
         await db.commit()
+
+        await event_publisher.publish_user_event("created", {
+            "user_id": create_user_model.id,
+            "email": create_user_model.email,
+            "first_name": create_user_model.first_name,
+            "last_name": create_user_model.last_name
+        })
 
         logger.info(f"New User Registered: {create_user_model.email}")
         return MessageResponse(message="User Registered Successfully.")

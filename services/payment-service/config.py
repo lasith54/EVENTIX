@@ -10,7 +10,7 @@ class Settings(BaseSettings):
 
     # Server
     host: str = Field(default="0.0.0.0", description="Host")
-    port: int = Field(default=8004, description="Port")
+    port: int = Field(default=8003, description="Port")
     
     class Config:
         env_file = ".env"

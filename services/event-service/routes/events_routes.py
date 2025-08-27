@@ -1,3 +1,7 @@
+import os
+import sys
+sys.path.append(os.path.join(os.path.dirname(__file__), '..', '..', '..'))
+
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, and_, or_, func
@@ -21,7 +25,11 @@ from schemas import (
 )
 import logging
 
+from shared.event_publisher import EventPublisher
+
 logger = logging.getLogger(__name__)
+
+event_publisher = EventPublisher("event-service")
 
 
 router = APIRouter(prefix="/events", tags=["events"])
@@ -97,6 +105,19 @@ async def create_event(
     # Return event with relationships
     # return await get_event(event.id, db)
     logger.info(f"Event created with ID: {event.id}")
+
+    await event_publisher.publish_event_event("created", {
+        "event_id": event.id,
+        "title": event_data.get("title"),
+        # "event_date": event_data.get("event_date"),
+        "event_type": event_data.get("event_type"),
+        "venue": event_data.get("venue_id"),
+        "category": event_data.get("category_id"),
+        "artist_performer": event_data.get("artist_performer"),
+        "organizer": event_data.get("organizer"),
+        "duration_minutes": event_data.get("duration_minutes"),
+    })
+
     return MessageResponse(message="Event created successfully")
 
 

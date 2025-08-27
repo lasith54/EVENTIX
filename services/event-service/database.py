@@ -1,13 +1,25 @@
+import sys
+import os
+sys.path.append(os.path.join(os.path.dirname(__file__), '..', '..'))
+
 from sqlalchemy.orm import declarative_base
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine, async_sessionmaker
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 from fastapi import Depends
+from mode import production
 
-engine = create_engine('postgresql+psycopg2://postgres:postgres@event-db:5432/event-db', echo=True, future=True)
+if production:
+    engine = create_engine('postgresql+psycopg2://postgres:postgres@event-db:5432/event-db', echo=True, future=True)
+else:
+    engine = create_engine('postgresql+psycopg2://postgres:postgres@localhost:5433/event-db', echo=True, future=True)
+
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
-async_engine = create_async_engine('postgresql+asyncpg://postgres:postgres@event-db:5432/event-db', echo=True, future=True)
+if production:
+    async_engine = create_async_engine('postgresql+asyncpg://postgres:postgres@event-db:5432/event-db', echo=True, future=True)
+else:
+    async_engine = create_async_engine('postgresql+asyncpg://postgres:postgres@localhost:5433/event-db', echo=True, future=True)
 
 AsyncSessionLocal = async_sessionmaker(async_engine, class_=AsyncSession, expire_on_commit=False)
 

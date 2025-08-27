@@ -1,7 +1,7 @@
 # 🎟️ Eventix
 
 A comprehensive **microservices-based ticket booking platform** built with FastAPI, SQLAlchemy, and PostgreSQL.  
-The system includes **User Service**, **Event Service**, **Booking Service**, and **Payment Service** for complete ticket management.
+The system includes **User Service**, **Event Service**, **Booking Service**, **Payment Service**, and **API-Gateway** for complete ticket management.
 
 ---
 
@@ -10,6 +10,7 @@ The system includes **User Service**, **Event Service**, **Booking Service**, an
 - 🐍 Python 3.12+
 - 🐳 Docker & Docker Compose
 - 🛢️ PostgreSQL (via Docker)
+- 🐰 RabbitMQ (via Docker)
 - 🛡️ (Recommended) Virtual environment
 
 ---
@@ -22,107 +23,137 @@ The system includes **User Service**, **Event Service**, **Booking Service**, an
    cd eventix-user-service
    ```
 
-2. **Create and activate a virtual environment:**
-   ```sh
+2. **Environment Setup**
+
+   **Option A: Full Docker Development**
+   ```bash
+   # Change the production variable in mode.py
+   production = True
+
+   # Build and start all services with Docker
+   docker-compose up --build -d
+   ```
+   
+   **Option B: Hybrid Development (Databases in Docker, Services Local)**
+   ```bash
+   # 1. Start only databases and RabbitMQ
+   docker-compose up -d user-db event-db booking-db payment-db rabbitmq
+
+   # 2. Create virtual environment for each service
    python -m venv .venv
-   .venv\Scripts\activate
-   ```
-   with uv package manager
-   ```sh
-   uv .venv
-   .venv\Scripts\activate
-   ```
+   .venv\Scripts\activate  # Windows
+   # source .venv/bin/activate  # Linux/Mac
 
-3. **Install dependencies:**
-   ```sh
+   # 3. Install dependencies for each service
+   cd services/user-service
    pip install -r requirements.txt
+
+   # 4. Change the production variable in mode.py
+   production = False
+
+   # 5. Start services locally (in separate terminals)
+      # Terminal 1 - User Service
+      cd services/user-service
+      uvicorn main:app --host 0.0.0.0 --port 8000 --reload
+
+      # Terminal 2 - Event Service  
+      cd services/event-service
+      uvicorn main:app --host 0.0.0.0 --port 8001 --reload
+
+      # Terminal 3 - Booking Service
+      cd services/booking-service
+      uvicorn main:app --host 0.0.0.0 --port 8002 --reload
+
+      # Terminal 4 - Payment Service
+      cd services/payment-service
+      uvicorn main:app --host 0.0.0.0 --port 8003 --reload
+
+      # Terminal 5 - API Gateway
+      cd services/api-gateway
+      uvicorn main:app --host 0.0.0.0 --port 8080 --reload
    ```
-   with uv package manager
-   ```sh
-   uv pip install -r requirements.txt
-   ```
-
-<!-- 4. **Configure environment variables:**
-   - Copy `.env.example` to `.env` and update values as needed (especially the database URL). -->
-
-5. **Start PostgreSQL with Docker Compose:**
-   ```sh
-   docker compose up -d
-   ```
-
-<!-- 6. **Run Alembic migrations:**
-   ```sh
-   alembic upgrade head
-   ``` -->
-
-## 🏃‍♂️ Running the Service
-
-### 2️⃣ Start All Services
-```bash
-# Build and start all services
-docker-compose up --build -d
-```
-
-**Start services locally:**
-```bash
-# Terminal 1 - User Service
-cd services/user-service
-uvicorn main:app --host 0.0.0.0 --port 8000 --reload
-
-# Terminal 2 - Event Service  
-cd services/event-service
-uvicorn main:app --host 0.0.0.0 --port 8001 --reload
-
-# Terminal 3 - Booking Service
-cd services/booking-service
-uvicorn main:app --host 0.0.0.0 --port 8002 --reload
-
-# Terminal 4 - Payment Service
-cd services/payment-service
-uvicorn main:app --host 0.0.0.0 --port 8003 --reload
-```
 
 ---
 
 ## 🗂️ Project Structure
 
 ```
-eventix/
+Eventix/
 ├── 📁 services/
 │   ├── 📁 user-service/
-│   │   ├── main.py              # 🚦 FastAPI app & authentication
-│   │   ├── models.py            # 🧩 User, preferences, sessions
-│   │   ├── database.py          # 🗄️ Database setup
-│   │   ├── auth_utils.py        # 🔐 JWT & password utilities
-│   │   ├── admin.py             # 👑 Admin user creation
-│   │   └── requirements.txt     # 📦 Python dependencies
+│   │   ├── main.py                 # 🚦 FastAPI app & lifespan management
+│   │   ├── models.py               # 🧩 User, UserProfile, Session models
+│   │   ├── schemas.py              # 📝 Pydantic request/response models
+│   │   ├── database.py             # 🗄️ Database connection & session
+│   │   ├── auth.py                 # 🔐 JWT authentication utilities
+│   │   ├── admin.py                # 👑 Admin user creation
+│   │   ├── requirements.txt        # 📦 Python dependencies
+│   │   ├── Dockerfile              # 🐳 Container configuration
+│   │   └── 📁 routes/
+│   │       ├── auth.py             # 🔑 Authentication endpoints
+│   │       ├── preference_routes.py # ⚙️ User preferences
+│   │       ├── notification_routes.py # 📧 Notifications
+│   │       └── session_routes.py   # 🔗 Session management
 │   │
 │   ├── 📁 event-service/
-│   │   ├── main.py              # 🎫 Event management API
-│   │   ├── models.py            # 🧩 Events, venues, pricing
-│   │   ├── schemas.py           # 📝 Pydantic models
-│   │   └── requirements.txt     # 📦 Dependencies
+│   │   ├── main.py                 # 🎫 Event management API
+│   │   ├── models.py               # 🧩 Event, Venue, Pricing models
+│   │   ├── schemas.py              # 📝 Event schemas
+│   │   ├── database.py             # 🗄️ Database configuration
+│   │   ├── requirements.txt        # 📦 Dependencies
+│   │   ├── Dockerfile              # 🐳 Container configuration
+│   │   └── 📁 routes/
+│   │       └── event_routes.py     # 🎪 Event CRUD operations
 │   │
 │   ├── 📁 booking-service/
-│   │   ├── main.py              # 📝 Booking management
-│   │   ├── models.py            # 🧩 Bookings, seats, history
-│   │   ├── schemas.py           # 📝 Booking schemas
-│   │   └── requirements.txt     # 📦 Dependencies
+│   │   ├── main.py                 # 📝 Booking management & saga pattern
+│   │   ├── models.py               # 🧩 Booking, SeatReservation models
+│   │   ├── schemas.py              # 📝 Booking schemas
+│   │   ├── database.py             # 🗄️ Database configuration
+│   │   ├── auth.py                 # 🔐 JWT token validation
+│   │   ├── requirements.txt        # 📦 Dependencies
+│   │   ├── Dockerfile              # 🐳 Container configuration
+│   │   └── 📁 routes/
+│   │       ├── booking_routes.py   # 🎟️ Booking operations
+│   │       └── saga_routes.py      # 🔄 Saga transaction management
 │   │
-│   └── 📁 payment-service/
-│       ├── main.py              # 💳 Payment processing
-│       ├── models.py            # 🧩 Payments, transactions
-│       ├── schemas.py           # 📝 Payment schemas
-│       └── requirements.txt     # 📦 Dependencies
+│   ├── 📁 payment-service/
+│   │   ├── main.py                 # 💳 Payment processing
+│   │   ├── models.py               # 🧩 Payment, Transaction models
+│   │   ├── schemas.py              # 📝 Payment schemas
+│   │   ├── database.py             # 🗄️ Database configuration
+│   │   ├── auth.py                 # 🔐 JWT token validation
+│   │   ├── requirements.txt        # 📦 Dependencies
+│   │   ├── Dockerfile              # 🐳 Container configuration
+│   │   └── 📁 routes/
+│   │       └── payment_routes.py   # 💰 Payment operations
+│   │
+│   └── 📁 api-gateway/
+│       ├── main.py                 # 🌐 API Gateway & request routing
+│       ├── requirements.txt        # 📦 Dependencies
+│       └── Dockerfile              # 🐳 Container configuration
 │
-├── docker-compose.yml           # 🐳 Full system orchestration
-├── start-eventix.sh             # 🚀 Startup script
-└── README.md                    # 📚 This file
+├── 📁 shared/
+│   ├── __init__.py                 # 📦 Shared module initialization
+│   ├── rabbitmq_client.py          # 🐰 RabbitMQ connection & messaging
+│   ├── event_publisher.py          # 📢 Event publishing utilities
+│   └── event_handler.py            # 📥 Event handling base classes
+│
+├── docker-compose.yml              # 🐳 Complete system orchestration
+├── .dockerignore                   # 🚫 Docker ignore patterns
+└── README.md                       # 📚 This documentation
 ```
 
 ---
 
 ## 🎯 Core Features
+
+### 🌐 API Gateway (Port 8080)
+**Single entry point for all client requests:**
+- **Request Routing**: Intelligent routing to microservices
+- **Authentication**: Centralized JWT token validation  
+- **Load Balancing**: Distribute requests across service instances
+- **Health Monitoring**: Service availability checking
 
 ### 👤 User Service (Port 8000)
 - **Authentication**: JWT-based login/registration
@@ -149,7 +180,46 @@ eventix/
 - **Refund Management**: Full and partial refunds
 - **Payment Status**: Real-time payment tracking
 
+### 📡 API Endpoints
+
+**Access via API Gateway (http://localhost:8080):**
+- **User Routes**: `/api/v1/auth/*`, `/api/v1/users/*`
+- **Event Routes**: `/api/v1/events/*`
+- **Booking Routes**: `/api/v1/bookings/*`
+- **Payment Routes**: `/api/v1/payments/*`
+
+**Direct Service Access (Development):**
+- **🌐 API Gateway**: http://localhost:8080/docs
+- **👤 User Service**: http://localhost:8000/docs
+- **🎫 Event Service**: http://localhost:8001/docs  
+- **📝 Booking Service**: http://localhost:8002/docs
+- **💳 Payment Service**: http://localhost:8003/docs
 ---
+
+## 🗄️ Database Architecture
+
+### 📊 Database Per Service Pattern
+Each service has its own PostgreSQL database:
+
+- **user-db** (Port 5432): User accounts, profiles, sessions
+- **event-db** (Port 5433): Events, venues, seats, pricing
+- **booking-db** (Port 5434): Bookings, reservations, history
+- **payment-db** (Port 5435): Payments, transactions, refunds
+
+### 🔄 Data Consistency
+- **Event Sourcing**: All state changes are events
+- **Saga Pattern**: Distributed transaction management
+- **Eventual Consistency**: Cross-service data synchronization
+
+---
+
+## 🔐 Security Features
+
+### 🛡️ Authentication & Authorization
+- **JWT Tokens**: Stateless authentication
+- **Role-Based Access**: User/Admin role separation
+- **Token Validation**: Centralized in API Gateway
+- **Session Management**: Active session tracking
 
 ## 🔐 Default Admin Access
 

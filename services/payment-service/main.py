@@ -1,18 +1,75 @@
+import sys
+import os
+sys.path.append(os.path.join(os.path.dirname(__file__), '..', '..'))
+
 import models
 from fastapi import FastAPI, Request, status, Depends, HTTPException, APIRouter
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
-from typing import Annotated
+from typing import Annotated, Dict, Any
 from sqlalchemy.orm import Session
 from contextlib import asynccontextmanager
 from database import engine, SessionLocal
 import logging
 from routes import payment_method_routes, payment_routes, refund_routes
 import time
+import asyncio
 
 from config import settings
 
-app = FastAPI()
+from shared.rabbitmq_client import rabbitmq_client
+from shared.event_handler import BaseEventHandler
+
+import logging
+logger = logging.getLogger(__name__)
+
+class PaymentServiceEventHandler(BaseEventHandler):
+    def __init__(self):
+        super().__init__("payment-service")
+
+    async def handle_user_event(self, event_type: str, event_data: Dict[str, Any]):
+        logger.info(f"Payment service received user event: {event_type}")
+
+    async def handle_event_event(self, event_type: str, event_data: Dict[str, Any]):
+        if event_type == "cancelled":
+            event_id = event_data['data']['event_id']
+            logger.info(f"Process refunds for cancelled event: {event_id}")
+
+    async def handle_booking_event(self, event_type: str, event_data: Dict[str, Any]):
+        if event_type == "created":
+            booking_id = event_data['data']['booking_id']
+            amount = event_data['data']['total_amount']
+            logger.info(f"Initiate payment for booking {booking_id}: ${amount}")
+            # TODO: Process payment
+
+    async def handle_payment_event(self, event_type: str, event_data: Dict[str, Any]):
+        logger.info(f"Payment service received payment event: {event_type}")
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # Setup RabbitMQ
+    await rabbitmq_client.connect()
+    await rabbitmq_client.setup_exchanges_and_queues("payment-service")
+    
+    # Start event handler
+    event_handler = PaymentServiceEventHandler()
+    asyncio.create_task(
+        rabbitmq_client.start_consuming("payment-service", event_handler.handle_event)
+    )
+    
+    logger.info("Payment service started successfully")
+    
+    yield
+    
+    # Cleanup
+    await rabbitmq_client.disconnect()
+
+app = FastAPI(
+    title="Payment Service",
+    description="Payment Processing Service",
+    version="1.0.0",
+    lifespan=lifespan
+)
 
 models.Base.metadata.create_all(engine)
 
@@ -64,6 +121,9 @@ async def log_requests(request: Request, call_next):
     
     return response
 
+@app.get("/health")
+async def health_check():
+    return {"status": "healthy", "service": "payment-service"}
 
 # Global exception handler
 @app.exception_handler(Exception)
@@ -73,3 +133,7 @@ async def internal_server_error_handler(request: Request, exc: Exception):
         status_code=500,
         content={"detail": "Internal Server Error"}
     )
+
+if __name__ == "__main__":
+    import uvicorn
+    uvicorn.run(app, host="0.0.0.0", port=8003)

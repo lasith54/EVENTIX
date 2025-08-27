@@ -4,16 +4,20 @@ FROM python:3.11-slim
 WORKDIR /app
 
 # Copy the requirements file to the working directory
-COPY requirements.txt .
+COPY services/payment-service/requirements.txt ./requirements.txt
 
 # Install the Python dependencies
 RUN pip install --no-cache-dir -r requirements.txt
 
+COPY ../../shared ./shared
+
 # Copy the application code to the working directory
-COPY . .
+COPY services/payment-service/ .
+
+RUN ls -la /app/
 
 # Expose the port on which the application will run
-EXPOSE 8000
+EXPOSE 8003
 
 # Run the FastAPI application using uvicorn server
-CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000"]
+CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8003"]

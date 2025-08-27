@@ -1,3 +1,7 @@
+import sys
+import os
+sys.path.append(os.path.join(os.path.dirname(__file__), '..', '..', '..'))
+
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
@@ -12,7 +16,11 @@ from schemas import (
 )
 from auth import get_current_user, TokenData
 
+from shared.event_publisher import EventPublisher
+
 router = APIRouter(prefix="/bookings", tags=["Bookings"])
+
+event_publisher = EventPublisher("booking-service")
 
 @router.post("/", response_model=BookingResponse, status_code=status.HTTP_201_CREATED)
 async def create_booking(
@@ -36,7 +44,16 @@ async def create_booking(
     
     await db.commit()
     await db.refresh(booking)
-    return booking
+    
+    await event_publisher.publish_booking_event("created", {
+        "booking_id": booking.id,
+        "user_id": current_user.user_id,
+        "event_id": booking_data.get("event_id"),
+        "total_amount": booking_data.get("total_amount"),
+        "items": [item.dict() for item in booking_data.items]
+    })
+    
+    return {"message": "Booking created successfully"}
 
 @router.get("/{booking_id}", response_model=BookingResponse)
 async def get_booking(
