@@ -12,6 +12,7 @@ COPY services/api-gateway/requirements.txt ./requirements.txt
 RUN pip install --no-cache-dir -r requirements.txt
 
 COPY ../../shared ./shared
+COPY ../../mode.py ./mode.py
 
 # Copy application code
 COPY services/api-gateway/ .

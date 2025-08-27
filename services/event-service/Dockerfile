@@ -10,6 +10,7 @@ COPY services/event-service/requirements.txt ./requirements.txt
 RUN pip install --no-cache-dir -r requirements.txt
 
 COPY ../../shared ./shared
+COPY ../../mode.py ./mode.py
 
 # Copy the application code to the working directory
 COPY services/event-service/ .
