@@ -19,6 +19,8 @@ from config import settings
 
 from shared.rabbitmq_client import rabbitmq_client
 from shared.event_handler import BaseEventHandler
+# from event_handlers.user_event_handler import PaymentServiceUserHandler
+from event_handlers.booking_event_handler import PaymentServiceBookingHandler
 
 import logging
 logger = logging.getLogger(__name__)
@@ -26,24 +28,38 @@ logger = logging.getLogger(__name__)
 class PaymentServiceEventHandler(BaseEventHandler):
     def __init__(self):
         super().__init__("payment-service")
+        # self.user_handler = PaymentServiceUserHandler()
+        self.booking_handler = PaymentServiceBookingHandler()
 
     async def handle_user_event(self, event_type: str, event_data: Dict[str, Any]):
-        logger.info(f"Payment service received user event: {event_type}")
-
-    async def handle_event_event(self, event_type: str, event_data: Dict[str, Any]):
-        if event_type == "cancelled":
-            event_id = event_data['data']['event_id']
-            logger.info(f"Process refunds for cancelled event: {event_id}")
+        """Handle user service events"""
+        try:
+            await self.user_handler.handle_user_event({
+                "event_type": event_type,
+                "data": event_data.get("data", {})
+            })
+        except Exception as e:
+            logger.error(f"Error handling user event {event_type}: {str(e)}")
 
     async def handle_booking_event(self, event_type: str, event_data: Dict[str, Any]):
-        if event_type == "created":
-            booking_id = event_data['data']['booking_id']
-            amount = event_data['data']['total_amount']
-            logger.info(f"Initiate payment for booking {booking_id}: ${amount}")
-            # TODO: Process payment
+        """Handle booking service events"""
+        try:
+            await self.booking_handler.handle_booking_event({
+                "event_type": event_type,
+                "data": event_data.get("data", {})
+            })
+        except Exception as e:
+            logger.error(f"Error handling booking event {event_type}: {str(e)}")
 
     async def handle_payment_event(self, event_type: str, event_data: Dict[str, Any]):
+        """Handle internal payment events"""
         logger.info(f"Payment service received payment event: {event_type}")
+        # Handle internal payment events if needed
+
+    async def handle_event_event(self, event_type: str, event_data: Dict[str, Any]):
+        """Handle event service events"""
+        logger.info(f"Payment service received event event: {event_type}")
+        # Handle event-related payment updates if needed
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):

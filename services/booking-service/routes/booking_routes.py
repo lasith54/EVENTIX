@@ -15,45 +15,28 @@ from schemas import (
     BookingItemCreate, BookingItemResponse
 )
 from auth import get_current_user, TokenData
+from workflow_handler import BookingWorkflowHandler
 
 from shared.event_publisher import EventPublisher
+import logging
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/bookings", tags=["Bookings"])
+workflow_handler = BookingWorkflowHandler()
 
-event_publisher = EventPublisher("booking-service")
-
-@router.post("/", response_model=BookingResponse, status_code=status.HTTP_201_CREATED)
+@router.post("/create", response_model=BookingResponse, status_code=status.HTTP_201_CREATED)
 async def create_booking(
     booking_data: BookingCreate,
     current_user: TokenData = Depends(get_current_user),
     db: AsyncSession = Depends(get_async_db)
 ):
-    booking = Booking(
-        booking_reference=Booking.generate_reference(),
-        user_id=current_user.user_id,
-        **booking_data.dict(exclude={'items'})
-    )
-    
-    db.add(booking)
-    await db.flush()
-    
-    # Create booking items
-    for item_data in booking_data.items:
-        booking_item = BookingItem(booking_id=booking.id, **item_data.dict())
-        db.add(booking_item)
-    
-    await db.commit()
-    await db.refresh(booking)
-    
-    await event_publisher.publish_booking_event("created", {
-        "booking_id": booking.id,
-        "user_id": current_user.user_id,
-        "event_id": booking_data.get("event_id"),
-        "total_amount": booking_data.get("total_amount"),
-        "items": [item.dict() for item in booking_data.items]
-    })
-    
-    return {"message": "Booking created successfully"}
+    workflow_id = await workflow_handler.start_booking_workflow(booking_data)
+
+    return {
+        "message": "Booking creation workflow started",
+        "workflow_id": workflow_id
+    }
 
 @router.get("/{booking_id}", response_model=BookingResponse)
 async def get_booking(

@@ -83,7 +83,7 @@ async def create_user(db: async_db_dependency,
         await db.commit()
 
         await event_publisher.publish_user_event("created", {
-            "user_id": create_user_model.id,
+            "user_id": str(create_user_model.id),
             "email": create_user_model.email,
             "first_name": create_user_model.first_name,
             "last_name": create_user_model.last_name
@@ -120,6 +120,11 @@ async def login_user(db: async_db_dependency, form_data: Annotated[OAuth2Passwor
         
         if not user or not bcrypt_context.verify(form_data.password, user.hashed_password):
             logger.warning(f"Failed login attempt for email: {form_data.username}")
+            await event_publisher.publish_user_event("login_failed", {
+                "email": form_data.username,
+                "timestamp": datetime.utcnow().isoformat(),
+                "reason": "invalid_credentials"
+            })
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
                 detail="Invalid credentials",
@@ -128,6 +133,12 @@ async def login_user(db: async_db_dependency, form_data: Annotated[OAuth2Passwor
         
         # Check if user is active
         if not user.is_active:
+            await event_publisher.publish_user_event("login_failed", {
+                "user_id": str(user.id),
+                "email": user.email,
+                "timestamp": datetime.utcnow().isoformat(),
+                "reason": "account_deactivated"
+            })
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail="Account is deactivated"
@@ -145,6 +156,17 @@ async def login_user(db: async_db_dependency, form_data: Annotated[OAuth2Passwor
 
         user.last_login = datetime.utcnow()
         await db.commit()
+
+        # Publish successful login event
+        await event_publisher.publish_user_event("login_successful", {
+            "user_id": str(user.id),
+            "email": user.email,
+            "role": user.role,
+            "last_login": user.last_login.isoformat(),
+            "session_info": {
+                "access_token_expires": access_token_expires.total_seconds()
+            }
+        })
         
         logger.info(f"User logged in successfully: {user.email}")
         return Token(access_token=access_token, refresh_token=refresh_token, expires_in=access_token_expires.total_seconds())
@@ -173,6 +195,10 @@ async def refresh_token(db: async_db_dependency, token_data: TokenRefresh):
         user_id = payload.get("sub")
         
         if user_id is None:
+            await event_publisher.publish_user_event("token_refresh_failed", {
+                "reason": "invalid_token",
+                "timestamp": datetime.utcnow().isoformat()
+            })
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
                 detail="Invalid refresh token"
@@ -183,6 +209,11 @@ async def refresh_token(db: async_db_dependency, token_data: TokenRefresh):
         result = await db.execute(stmt)
         user = result.scalar_one_or_none()
         if not user or not user.is_active:
+            await event_publisher.publish_user_event("token_refresh_failed", {
+                "user_id": user_id,
+                "reason": "user_not_found_or_inactive",
+                "timestamp": datetime.utcnow().isoformat()
+            })
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
                 detail="User not found or inactive"
@@ -196,6 +227,14 @@ async def refresh_token(db: async_db_dependency, token_data: TokenRefresh):
             role=user.role,
             expires_delta=access_token_expires
         )
+
+        await event_publisher.publish_user_event("token_refreshed", {
+            "user_id": str(user.id),
+            "email": user.email,
+            "role": user.role,
+            "new_token_expires": access_token_expires.total_seconds(),
+            "timestamp": datetime.utcnow().isoformat()
+        })
         
         return AccessToken(
             access_token=access_token,
@@ -230,7 +269,14 @@ def create_refresh_token(user_id: int):
 
 @router.post('/logout', response_model=MessageResponse, dependencies=[Depends(get_current_user)])
 async def logout_user(user: Annotated[TokenData, Depends(get_current_user)]):
-    try:     
+    try:
+        await event_publisher.publish_user_event("logout", {
+            "user_id": str(user.user_id),
+            "email": user.email,
+            "role": user.role,
+            "logout_timestamp": datetime.utcnow().isoformat()
+        }) 
+
         logger.info(f"User logged out: {user.email}")
         return MessageResponse(message="Successfully logged out")
         
@@ -278,12 +324,36 @@ async def update_user_profile(
             detail="User profile not found"
         )
     
+    # Store old values for comparison
+    old_profile_data = {
+        "date_of_birth": profile.date_of_birth.isoformat() if profile.date_of_birth else None,
+        "bio": profile.bio,
+        "avatar_url": profile.avatar_url,
+        "preferences": profile.preferences
+    }
+    
     for key, value in profile_data.dict().items():
         setattr(profile, key, value)
     
+    profile.updated_at = datetime.utcnow()
     await db.commit()
     await db.refresh(profile)
     
+    await event_publisher.publish_user_event("profile_updated", {
+        "user_id": str(user.user_id),
+        "email": user.email,
+        "updated_fields": list(profile_data.dict(exclude_unset=True).keys()),
+        "old_data": old_profile_data,
+        "new_data": {
+            "date_of_birth": profile.date_of_birth.isoformat() if profile.date_of_birth else None,
+            "bio": profile.bio,
+            "avatar_url": profile.avatar_url,
+            "preferences": profile.preferences
+        },
+        "timestamp": datetime.utcnow().isoformat()
+    })
+        
+    logger.info(f"Profile updated for user: {user.email}")
     return profile
 
 @router.put('change-password', response_model=MessageResponse, dependencies=[Depends(get_current_user)])
@@ -297,6 +367,12 @@ async def change_password(
     user = result.scalar_one_or_none()
     
     if not user or not bcrypt_context.verify(password_data.current_password, user.hashed_password):
+        await event_publisher.publish_user_event("password_change_failed", {
+            "user_id": str(user.user_id),
+            "email": user.email,
+            "reason": "invalid_current_password",
+            "timestamp": datetime.utcnow().isoformat()
+        })
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Current password is incorrect"
@@ -305,6 +381,13 @@ async def change_password(
     user.hashed_password = bcrypt_context.hash(password_data.new_password)
     user.updated_at = datetime.utcnow()
     await db.commit()
+
+    await event_publisher.publish_user_event("password_changed", {
+        "user_id": str(user.id),
+        "email": user.email,
+        "timestamp": datetime.utcnow().isoformat(),
+        "security_note": "User should be notified via email"
+    })
     
     logger.info(f"Password changed successfully for user: {user.email}")
     return MessageResponse(message="Password changed successfully")

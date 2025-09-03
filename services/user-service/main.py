@@ -18,6 +18,7 @@ import asyncio
 
 from shared.rabbitmq_client import rabbitmq_client
 from shared.event_handler import BaseEventHandler
+from event_handlers.booking_event_handler import NotificationServiceBookingHandler
 
 from config import settings
 
@@ -27,32 +28,32 @@ logger = logging.getLogger(__name__)
 class UserServiceEventHandler(BaseEventHandler):
     def __init__(self):
         super().__init__("user-service")
-
-    async def handle_user_event(self, event_type: str, event_data: Dict[str, Any]):
-        logger.info(f"User service received user event: {event_type}")
-        # User service doesn't typically handle its own events
-
-    async def handle_event_event(self, event_type: str, event_data: Dict[str, Any]):
-        if event_type == "created":
-            logger.info(f"New event created: {event_data['data'].get('title', 'Unknown')}")
-            # TODO: Send notifications to interested users
+        self.notification_handler = NotificationServiceBookingHandler()
 
     async def handle_booking_event(self, event_type: str, event_data: Dict[str, Any]):
-        if event_type == "created":
-            user_id = event_data['data']['user_id']
-            logger.info(f"Booking created for user {user_id}")
-            # TODO: Send booking confirmation email
-            
-        elif event_type == "confirmed":
-            user_id = event_data['data']['user_id']
-            logger.info(f"Booking confirmed for user {user_id}")
+        """Handle booking service events for notifications"""
+        try:
+            await self.notification_handler.handle_booking_event({
+                "event_type": event_type,
+                "data": event_data.get("data", {})
+            })
+        except Exception as e:
+            logger.error(f"Error handling booking event for notifications {event_type}: {str(e)}")
+
+    async def handle_user_event(self, event_type: str, event_data: Dict[str, Any]):
+        """Handle internal user service events"""
+        logger.info(f"User service received user event: {event_type}")
+        # Handle internal user events if needed
 
     async def handle_payment_event(self, event_type: str, event_data: Dict[str, Any]):
-        if event_type == "completed":
-            user_id = event_data['data']['user_id']
-            logger.info(f"Payment completed for user {user_id}")
-            # TODO: Send payment receipt
+        """Handle payment service events for notifications"""
+        logger.info(f"User service received payment event: {event_type}")
+        # Handle payment-related notifications if needed
 
+    async def handle_event_event(self, event_type: str, event_data: Dict[str, Any]):
+        """Handle event service events for notifications"""
+        logger.info(f"User service received event event: {event_type}")
+        # Handle event-related notifications if needed
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """
