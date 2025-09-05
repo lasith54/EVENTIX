@@ -15,10 +15,12 @@ const SearchFilter = ({ filters, setFilters }) => {
           onChange={(e) => handleFilterChange('category', e.target.value)}
         >
           <option value="">All Categories</option>
-          <option value="CONCERT">Concert</option>
-          <option value="SPORTS">Sports</option>
-          <option value="THEATER">Theater</option>
-          <option value="CONFERENCE">Conference</option>
+          <option value="concert">Concert</option>
+          <option value="sports">Sports</option>
+          <option value="theater">Theater</option>
+          <option value="conference">Conference</option>
+          <option value="comedy">Comedy</option>
+          <option value="exhibition">Exhibition</option>
         </select>
       </div>
 
@@ -53,6 +55,16 @@ const SearchFilter = ({ filters, setFilters }) => {
           <option value="5000-10000">LKR 5,000 - 10,000</option>
           <option value="10000+">Above LKR 10,000</option>
         </select>
+      </div>
+
+      <div className="filter-group">
+        <label>Search:</label>
+        <input 
+          type="text"
+          placeholder="Search events..."
+          value={filters.search || ''}
+          onChange={(e) => handleFilterChange('search', e.target.value)}
+        />
       </div>
     </div>
   );

@@ -23,10 +23,22 @@ const Events = () => {
   const loadEvents = async () => {
     try {
       setLoading(true);
-      const response = await eventService.searchEvents(filters);
-      setEvents(response.data);
+      
+      // If we have filters, use search, otherwise get all events
+      let response;
+      if (Object.values(filters).some(value => value)) {
+        response = await eventService.searchEvents({
+          filters: filters,
+          q: filters.search || 'events'
+        });
+        setEvents(response.data.events || []);
+      } else {
+        response = await eventService.getAllEvents();
+        setEvents(response.data.items || []);
+      }
     } catch (err) {
       setError('Failed to load events');
+      console.error('Error loading events:', err);
     } finally {
       setLoading(false);
     }

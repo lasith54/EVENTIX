@@ -22,13 +22,20 @@ const BookingSummary = ({ event, selectedSeats, customerDetails, onConfirm, load
           <div className="info-row">
             <span className="label">Date:</span>
             <span className="value">
-              {event?.schedules?.[0] && new Date(event.schedules[0].start_datetime).toLocaleDateString()}
+              {event?.schedules?.[0] && new Date(event.schedules[0].start_datetime).toLocaleDateString('en-US', {
+                year: 'numeric',
+                month: 'long',
+                day: 'numeric'
+              })}
             </span>
           </div>
           <div className="info-row">
             <span className="label">Time:</span>
             <span className="value">
-              {event?.schedules?.[0] && new Date(event.schedules[0].start_datetime).toLocaleTimeString()}
+              {event?.schedules?.[0] && new Date(event.schedules[0].start_datetime).toLocaleTimeString('en-US', {
+                hour: '2-digit',
+                minute: '2-digit'
+              })}
             </span>
           </div>
         </div>

@@ -30,14 +30,19 @@ export const AuthProvider = ({ children }) => {
   const login = async (email, password) => {
     const response = await authService.login(email, password);
     localStorage.setItem('token', response.access_token);
-    setUser(response.user);
+    
+    // Get user data after login
+    const userData = await authService.getCurrentUser();
+    setUser(userData);
     return response;
   };
 
   const register = async (userData) => {
     const response = await authService.register(userData);
-    localStorage.setItem('token', response.access_token);
-    setUser(response.user);
+    if (response.message) {
+      // Registration successful, now login
+      await login(userData.email, userData.password);
+    }
     return response;
   };
 

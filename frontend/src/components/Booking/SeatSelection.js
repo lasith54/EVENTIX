@@ -14,12 +14,14 @@ const SeatSelection = ({ eventId, onSeatSelection, selectedSeats }) => {
 
   const loadVenueData = async () => {
     try {
-      // Load venue sections and seats
       const response = await eventService.getEventById(eventId);
-      const venue = response.data.venue;
-      setSections(venue.sections);
-      setSelectedSection(venue.sections[0]);
-      loadSeats(venue.sections[0].id);
+      const event = response.data;
+      
+      if (event.venue && event.venue.sections) {
+        setSections(event.venue.sections);
+        setSelectedSection(event.venue.sections[0]);
+        loadSeats(event.venue.sections[0].id);
+      }
     } catch (error) {
       console.error('Failed to load venue data');
     }
@@ -28,10 +30,11 @@ const SeatSelection = ({ eventId, onSeatSelection, selectedSeats }) => {
   const loadSeats = async (sectionId) => {
     try {
       setLoading(true);
-      const response = await eventService.getVenueSeats(selectedSection.venue_id, sectionId);
+      const response = await eventService.getVenueSeats(null, sectionId);
       setSeats(response.data);
     } catch (error) {
       console.error('Failed to load seats');
+      setSeats([]);
     } finally {
       setLoading(false);
     }

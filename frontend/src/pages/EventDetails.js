@@ -17,20 +17,11 @@ const EventDetails = () => {
 
   const loadEventDetails = async () => {
     try {
-      // For now, we'll use mock data since backend might not be ready
-      setEvent({
-        id: id,
-        title: "Sample Concert Event",
-        description: "This is a sample event description.",
-        venue: { name: "Sample Venue" },
-        schedules: [{ 
-          id: 1, 
-          start_datetime: new Date().toISOString(),
-          is_sold_out: false 
-        }]
-      });
+      const response = await eventService.getEventById(id);
+      setEvent(response.data);
     } catch (error) {
       console.error('Failed to load event details');
+      setEvent(null);
     } finally {
       setLoading(false);
     }

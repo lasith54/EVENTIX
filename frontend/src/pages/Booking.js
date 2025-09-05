@@ -54,13 +54,13 @@ const Booking = () => {
         customer_name: customerDetails.name,
         customer_email: customerDetails.email,
         customer_phone: customerDetails.phone,
-        booking_items: selectedSeats.map(seat => ({
+        items: selectedSeats.map(seat => ({
           seat_id: seat.id,
           venue_section_id: seat.venue_section_id,
           unit_price: seat.price,
           quantity: 1,
           section_name: seat.section_name,
-          seat_row: seat.row_number,
+          seat_row: seat.row_number || 'A',
           seat_number: seat.seat_number
         })),
         total_amount: selectedSeats.reduce((sum, seat) => sum + seat.price, 0),
@@ -68,10 +68,17 @@ const Booking = () => {
       };
 
       const response = await bookingService.createBooking(bookingData);
-      navigate(`/payment/${response.data.id}`);
+      if (response.data && response.data.id) {
+        navigate(`/payment/${response.data.id}`);
+      } else {
+        // Handle success message response
+        alert('Booking created successfully!');
+        navigate('/profile');
+      }
     } catch (error) {
       console.error('Booking failed:', error);
-      alert('Booking failed. Please try again.');
+      const errorMessage = error.response?.data?.detail || 'Booking failed. Please try again.';
+      alert(errorMessage);
     } finally {
       setLoading(false);
     }
@@ -83,6 +90,7 @@ const Booking = () => {
         <div className="booking-header">
           <h1>Book Tickets</h1>
           {event && <h2>{event.title}</h2>}
+          }
         </div>
 
         <div className="booking-steps">
