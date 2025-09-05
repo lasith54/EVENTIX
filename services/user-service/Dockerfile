@@ -9,11 +9,11 @@ COPY services/user-service/requirements.txt ./requirements.txt
 # Install the Python dependencies
 RUN pip install --no-cache-dir -r requirements.txt
 
-COPY ../../shared ./shared
-COPY ../../mode.py ./mode.py
+# Copy shared modules first
+COPY shared/ ./shared/
 
-# Copy the application code to the working directory
-COPY services/user-service/ .
+# Copy service-specific code
+COPY services/user-service/ ./
 
 RUN ls -la /app/
 

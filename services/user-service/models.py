@@ -1,259 +1,228 @@
-from sqlalchemy import String
-from sqlalchemy.orm import declarative_base, relationship
-from sqlalchemy import Column, String, DateTime, Boolean, Text, Integer, ForeignKey, Index
-from sqlalchemy.dialects.postgresql import UUID, JSONB, ENUM as SQLEnum
-import uuid
+# services/user-service/models.py
+"""
+User Service Models - Updated for single database with schemas
+"""
+
+from sqlalchemy import Column, Integer, String, Boolean, DateTime, Date, Text, JSON, ForeignKey, Index
+from sqlalchemy.ext.declarative import declarative_base
+from sqlalchemy.orm import relationship
+from sqlalchemy.sql import func
 from datetime import datetime
-from enum import Enum
+import sys
+import os
 
-
-Base = declarative_base()
-
-class NotificationStatus(str, Enum):
-    PENDING = "pending"
-    SENT = "sent"
-    DELIVERED = "delivered"
-    FAILED = "failed"
-    READ = "read"
-
-
-class NotificationType(str, Enum):
-    BOOKING_CONFIRMATION = "booking_confirmation"
-    PAYMENT_SUCCESS = "payment_success"
-    PAYMENT_FAILED = "payment_failed"
-    EVENT_REMINDER = "event_reminder"
-    EVENT_CANCELLED = "event_cancelled"
-    EVENT_UPDATED = "event_updated"
-    BOOKING_CANCELLED = "booking_cancelled"
-    REFUND_PROCESSED = "refund_processed"
-    PROMOTIONAL = "promotional"
-    SYSTEM = "system"
-
-
-class NotificationChannel(str, Enum):
-    EMAIL = "email"
-    SMS = "sms"
-    PUSH = "push"
-    IN_APP = "in_app"
-
+# Add shared module to path
+sys.path.append(os.path.join(os.path.dirname(__file__), '../../shared'))
+from shared.database import Base
 
 class User(Base):
-    __tablename__ = "users"
+    __tablename__ = 'users'
+    __table_args__ = (
+        {'schema': 'users'},
+        Index('idx_user_email', 'email'),
+        Index('idx_user_active', 'is_active'),
+    )
     
-    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4, index=True)
+    id = Column(Integer, primary_key=True, index=True)
     email = Column(String(255), unique=True, index=True, nullable=False)
-    first_name = Column(String(100), nullable=False)
-    last_name = Column(String(100), nullable=False)
-    hashed_password = Column(String(255), nullable=False)
-    role = Column(String(50), default="user", nullable=False)  # e.g., "admin", "user"
-    is_active = Column(Boolean, default=True, nullable=False)
-    is_verified = Column(Boolean, default=False, nullable=False)
-    phone_number = Column(String(20), nullable=True)
-    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
-    last_login = Column(DateTime, nullable=True)
-
-    profile = relationship("UserProfile", uselist=False, back_populates="user")
-    refresh_tokens = relationship("RefreshToken", back_populates="user")
+    password_hash = Column(String(255), nullable=False)
+    first_name = Column(String(100))
+    last_name = Column(String(100))
+    phone = Column(String(20))
+    is_active = Column(Boolean, default=True, index=True)
+    is_admin = Column(Boolean, default=False)
+    created_at = Column(DateTime, server_default=func.now())
+    updated_at = Column(DateTime, server_default=func.now(), onupdate=func.now())
+    
+    # Relationships
+    profile = relationship("UserProfile", back_populates="user", uselist=False, cascade="all, delete-orphan")
     sessions = relationship("UserSession", back_populates="user", cascade="all, delete-orphan")
-    preferences = relationship("UserPreferences", uselist=False, back_populates="user", cascade="all, delete-orphan")
-    notifications = relationship("Notification", back_populates="user", cascade="all, delete-orphan")
-
+    
+    def __repr__(self):
+        return f"<User(id={self.id}, email='{self.email}')>"
+    
+    @property
+    def full_name(self):
+        if self.first_name and self.last_name:
+            return f"{self.first_name} {self.last_name}"
+        return self.email
+    
+    @property
+    def display_name(self):
+        """Get display name for UI"""
+        return self.full_name
+    
+    @property
+    def is_verified(self):
+        """Check if user is verified (active)"""
+        return self.is_active
+    
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'email': self.email,
+            'first_name': self.first_name,
+            'last_name': self.last_name,
+            'phone': self.phone,
+            'is_active': self.is_active,
+            'is_admin': self.is_admin,
+            'full_name': self.full_name,
+            'display_name': self.display_name,
+            'is_verified': self.is_verified,
+            'created_at': self.created_at.isoformat() if self.created_at else None,
+            'updated_at': self.updated_at.isoformat() if self.updated_at else None
+        }
+    
+    def to_public_dict(self):
+        """Public representation (safe for API responses)"""
+        return {
+            'id': self.id,
+            'email': self.email,
+            'first_name': self.first_name,
+            'last_name': self.last_name,
+            'full_name': self.full_name,
+            'is_active': self.is_active,
+            'created_at': self.created_at.isoformat() if self.created_at else None
+        }
 
 class UserProfile(Base):
-    __tablename__ = "user_profiles"
+    __tablename__ = 'user_profiles'
+    __table_args__ = (
+        {'schema': 'users'},
+        Index('idx_profile_user', 'user_id'),
+    )
     
-    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    user_id = Column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
-    date_of_birth = Column(DateTime, nullable=True)
-    bio = Column(Text, nullable=True)
-    avatar_url = Column(String(500), nullable=True)
-    preferences = Column(Text, nullable=True)  # JSON string for user preferences
-    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
-
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey('users.users.id'), nullable=False)
+    date_of_birth = Column(Date)
+    gender = Column(String(10))
+    address = Column(Text)
+    city = Column(String(100))
+    country = Column(String(100))
+    postal_code = Column(String(20))
+    bio = Column(Text)
+    avatar_url = Column(String(500))
+    preferences = Column(JSON, default=lambda: {})
+    notification_settings = Column(JSON, default=lambda: {
+        'email_notifications': True,
+        'sms_notifications': False,
+        'push_notifications': True,
+        'marketing_emails': False
+    })
+    created_at = Column(DateTime, server_default=func.now())
+    updated_at = Column(DateTime, server_default=func.now(), onupdate=func.now())
+    
+    # Relationships
     user = relationship("User", back_populates="profile")
-
-
-class RefreshToken(Base):
-    __tablename__ = "refresh_tokens"
     
-    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    user_id = Column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
-    token = Column(String(255), unique=True, nullable=False, index=True)
-    expires_at = Column(DateTime, nullable=False)
-    is_active = Column(Boolean, default=True, nullable=False)
-    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
-
-    user = relationship("User", back_populates="refresh_tokens")
+    def __repr__(self):
+        return f"<UserProfile(id={self.id}, user_id={self.user_id}, city='{self.city}')>"
+    
+    @property
+    def age(self):
+        """Calculate user's age from date of birth"""
+        if self.date_of_birth:
+            today = datetime.now().date()
+            return today.year - self.date_of_birth.year - (
+                (today.month, today.day) < (self.date_of_birth.month, self.date_of_birth.day)
+            )
+        return None
+    
+    @property
+    def full_address(self):
+        """Get formatted full address"""
+        address_parts = []
+        if self.address:
+            address_parts.append(self.address)
+        if self.city:
+            address_parts.append(self.city)
+        if self.postal_code:
+            address_parts.append(self.postal_code)
+        if self.country:
+            address_parts.append(self.country)
+        return ', '.join(address_parts) if address_parts else None
+    
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'user_id': self.user_id,
+            'date_of_birth': self.date_of_birth.isoformat() if self.date_of_birth else None,
+            'age': self.age,
+            'gender': self.gender,
+            'address': self.address,
+            'city': self.city,
+            'country': self.country,
+            'postal_code': self.postal_code,
+            'full_address': self.full_address,
+            'bio': self.bio,
+            'avatar_url': self.avatar_url,
+            'preferences': self.preferences or {},
+            'notification_settings': self.notification_settings or {},
+            'created_at': self.created_at.isoformat() if self.created_at else None,
+            'updated_at': self.updated_at.isoformat() if self.updated_at else None
+        }
 
 class UserSession(Base):
-    __tablename__ = "user_sessions"
+    __tablename__ = 'user_sessions'
+    __table_args__ = (
+        {'schema': 'users'},
+        Index('idx_session_token', 'token_hash'),
+        Index('idx_session_user', 'user_id'),
+        Index('idx_session_active', 'is_active', 'expires_at'),
+    )
     
-    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4, index=True)
-    user_id = Column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
-    session_token = Column(String(500), nullable=False, unique=True, index=True)
-    device_info = Column(Text, nullable=True)
-    ip_address = Column(String(45), nullable=True)  # Support both IPv4 and IPv6
-    user_agent = Column(Text, nullable=True)
-    expires_at = Column(DateTime, nullable=False, index=True)
-    is_active = Column(Boolean, default=True, nullable=False)
-    last_accessed = Column(DateTime, default=datetime.utcnow, nullable=False)
-    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
-
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey('users.users.id'), nullable=False)
+    token_hash = Column(String(255), nullable=False, index=True)
+    expires_at = Column(DateTime, nullable=False)
+    is_active = Column(Boolean, default=True, index=True)
+    created_at = Column(DateTime, server_default=func.now())
+    user_agent = Column(Text)
+    ip_address = Column(String(45))  # Supports IPv6
+    
     # Relationships
     user = relationship("User", back_populates="sessions")
+    
+    def __repr__(self):
+        return f"<UserSession(id={self.id}, user_id={self.user_id}, active={self.is_active})>"
+    
+    @property
+    def is_expired(self):
+        return datetime.utcnow() > self.expires_at
+    
+    @property
+    def is_valid(self):
+        """Check if session is valid (active and not expired)"""
+        return self.is_active and not self.is_expired
+    
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'user_id': self.user_id,
+            'expires_at': self.expires_at.isoformat() if self.expires_at else None,
+            'is_active': self.is_active,
+            'is_expired': self.is_expired,
+            'is_valid': self.is_valid,
+            'created_at': self.created_at.isoformat() if self.created_at else None,
+            'user_agent': self.user_agent,
+            'ip_address': self.ip_address
+        }
 
-    # Indexes
-    __table_args__ = (
-        Index('idx_user_sessions_user_expires', 'user_id', 'expires_at'),
-        Index('idx_user_sessions_token_active', 'session_token', 'is_active'),
-    )
+# Constants and Enums
+class UserRole:
+    """User role constants"""
+    USER = 'user'
+    ADMIN = 'admin'
+    MODERATOR = 'moderator'
 
-
-class UserPreferences(Base):
-    __tablename__ = "user_preferences"
-    
-    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    user_id = Column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=False, unique=True, index=True)
-    
-    # Notification Preferences
-    email_notifications = Column(Boolean, default=True, nullable=False)
-    sms_notifications = Column(Boolean, default=False, nullable=False)
-    push_notifications = Column(Boolean, default=True, nullable=False)
-    in_app_notifications = Column(Boolean, default=True, nullable=False)
-    
-    # Marketing Preferences
-    marketing_emails = Column(Boolean, default=False, nullable=False)
-    promotional_sms = Column(Boolean, default=False, nullable=False)
-    
-    # Event Preferences
-    event_reminders = Column(Boolean, default=True, nullable=False)
-    booking_updates = Column(Boolean, default=True, nullable=False)
-    payment_alerts = Column(Boolean, default=True, nullable=False)
-    
-    # Localization
-    preferred_language = Column(String(10), default='en', nullable=False)
-    timezone = Column(String(50), default='UTC', nullable=False)
-    currency = Column(String(3), default='USD', nullable=False)
-    
-    # Privacy Settings
-    profile_visibility = Column(String(20), default='private', nullable=False)  # public, private, friends
-    data_sharing_consent = Column(Boolean, default=False, nullable=False)
-    
-    # Additional preferences as JSON
-    custom_preferences = Column(JSONB, nullable=True)
-    
-    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
-
-    # Relationships
-    user = relationship("User", back_populates="preferences")
-
-
-class Notification(Base):
-    __tablename__ = "notifications"
-    
-    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4, index=True)
-    user_id = Column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
-    
-    # Notification Content
-    type = Column(SQLEnum(NotificationType), nullable=False, index=True)
-    channel = Column(SQLEnum(NotificationChannel), nullable=False, index=True)
-    title = Column(String(200), nullable=False)
-    message = Column(Text, nullable=False)
-    
-    # Status and Delivery
-    status = Column(SQLEnum(NotificationStatus), default=NotificationStatus.PENDING, nullable=False, index=True)
-    
-    # Related Data
-    related_entity_type = Column(String(50), nullable=True)  # 'booking', 'event', 'payment'
-    related_entity_id = Column(UUID(as_uuid=True), nullable=True)  # ID from other services
-    
-    # Metadata and Context
-    notification_metadata = Column(JSONB, nullable=True)  # Additional data like booking_id, event_id, etc.
-    action_url = Column(String(500), nullable=True)  # Deep link or URL for action
-    
-    # Scheduling and Delivery
-    scheduled_at = Column(DateTime, nullable=True, index=True)
-    sent_at = Column(DateTime, nullable=True)
-    delivered_at = Column(DateTime, nullable=True)
-    read_at = Column(DateTime, nullable=True)
-    
-    # Retry Logic
-    retry_count = Column(Integer, default=0, nullable=False)
-    max_retries = Column(Integer, default=3, nullable=False)
-    next_retry_at = Column(DateTime, nullable=True)
-    
-    # External Service Data
-    external_id = Column(String(200), nullable=True)  # ID from email/SMS provider
-    external_response = Column(JSONB, nullable=True)  # Response from external service
-    
-    # Priority and Grouping
-    priority = Column(String(10), default='normal', nullable=False)  # high, normal, low
-    group_key = Column(String(100), nullable=True)  # For grouping related notifications
-    
-    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
-
-    # Relationships
-    user = relationship("User", back_populates="notifications")
-
-    # Indexes
-    __table_args__ = (
-        Index('idx_notifications_user_status', 'user_id', 'status'),
-        Index('idx_notifications_type_channel', 'type', 'channel'),
-        Index('idx_notifications_scheduled_status', 'scheduled_at', 'status'),
-        Index('idx_notifications_retry', 'next_retry_at', 'retry_count'),
-        Index('idx_notifications_related_entity', 'related_entity_type', 'related_entity_id'),
-    )
-
-
-class NotificationTemplate(Base):
-    __tablename__ = "notification_templates"
-    
-    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4, index=True)
-    
-    # Template Identity
-    name = Column(String(100), nullable=False, unique=True, index=True)
-    type = Column(SQLEnum(NotificationType), nullable=False, index=True)
-    channel = Column(SQLEnum(NotificationChannel), nullable=False, index=True)
-    
-    # Template Content
-    subject_template = Column(String(200), nullable=True)  # For email
-    title_template = Column(String(200), nullable=False)
-    body_template = Column(Text, nullable=False)
-    
-    # Template Configuration
-    variables = Column(JSONB, nullable=True)  # Available template variables
-    default_values = Column(JSONB, nullable=True)  # Default values for variables
-    
-    # Localization
-    language = Column(String(10), default='en', nullable=False)
-    
-    # Template Settings
-    is_active = Column(Boolean, default=True, nullable=False)
-    version = Column(Integer, default=1, nullable=False)
-    
-    # Styling (for email templates)
-    html_template = Column(Text, nullable=True)  # HTML version for emails
-    css_styles = Column(Text, nullable=True)  # CSS styles for HTML emails
-    
-    # Usage Tracking
-    usage_count = Column(Integer, default=0, nullable=False)
-    last_used_at = Column(DateTime, nullable=True)
-    
-    # Metadata
-    description = Column(Text, nullable=True)
-    tags = Column(JSONB, nullable=True)  # Array of tags for organization
-    
-    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
-    created_by = Column(UUID(as_uuid=True), nullable=True)  # Admin user ID who created template
-
-    # Indexes
-    __table_args__ = (
-        Index('idx_notification_templates_type_channel', 'type', 'channel'),
-        Index('idx_notification_templates_active', 'is_active', 'language'),
-        Index('idx_notification_templates_name_version', 'name', 'version'),
-    )
+class NotificationSettings:
+    """Default notification settings"""
+    DEFAULT = {
+        'email_notifications': True,
+        'sms_notifications': False,
+        'push_notifications': True,
+        'marketing_emails': False,
+        'booking_confirmations': True,
+        'event_reminders': True,
+        'payment_notifications': True
+    }

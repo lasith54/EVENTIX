@@ -1,6 +1,5 @@
 import sys
 import os
-sys.path.append(os.path.join(os.path.dirname(__file__), '..', '..'))
 
 import models
 from fastapi import FastAPI, Request, status, Depends, HTTPException, APIRouter
@@ -9,91 +8,90 @@ from fastapi.responses import JSONResponse
 from typing import Annotated, Dict, Any
 from sqlalchemy.orm import Session
 from contextlib import asynccontextmanager
-from database import engine, SessionLocal
 import logging
 from routes import payment_method_routes, payment_routes, refund_routes
 import time
-import asyncio
 
-from config import settings
+# Add shared module to path
+sys.path.append(os.path.join(os.path.dirname(__file__), '../../shared'))
+from shared.database import DatabaseManager, CacheManager, create_all_tables
 
-from shared.rabbitmq_client import rabbitmq_client
-from shared.event_handler import BaseEventHandler
-
-import logging
+logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
-
-class PaymentServiceEventHandler(BaseEventHandler):
-    def __init__(self):
-        super().__init__("payment-service")
-
-    async def handle_user_event(self, event_type: str, event_data: Dict[str, Any]):
-        logger.info(f"Payment service received user event: {event_type}")
-
-    async def handle_event_event(self, event_type: str, event_data: Dict[str, Any]):
-        if event_type == "cancelled":
-            event_id = event_data['data']['event_id']
-            logger.info(f"Process refunds for cancelled event: {event_id}")
-
-    async def handle_booking_event(self, event_type: str, event_data: Dict[str, Any]):
-        if event_type == "created":
-            booking_id = event_data['data']['booking_id']
-            amount = event_data['data']['total_amount']
-            logger.info(f"Initiate payment for booking {booking_id}: ${amount}")
-            # TODO: Process payment
-
-    async def handle_payment_event(self, event_type: str, event_data: Dict[str, Any]):
-        logger.info(f"Payment service received payment event: {event_type}")
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # Setup RabbitMQ
-    await rabbitmq_client.connect()
-    await rabbitmq_client.setup_exchanges_and_queues("payment-service")
+    """Application lifespan management"""
+    logger.info("🚀 Starting Payment Service...")
     
-    # Start event handler
-    event_handler = PaymentServiceEventHandler()
-    asyncio.create_task(
-        rabbitmq_client.start_consuming("payment-service", event_handler.handle_event)
-    )
+    try:
+        create_all_tables()
+        logger.info("✅ Database tables created/verified")
+    except Exception as e:
+        logger.error(f"❌ Database setup failed: {e}")
+        raise
     
-    logger.info("Payment service started successfully")
+    db_healthy = DatabaseManager.health_check()
+    if not db_healthy:
+        raise Exception("Database connection failed")
     
+    logger.info("✅ Payment Service startup complete")
     yield
-    
-    # Cleanup
-    await rabbitmq_client.disconnect()
+    logger.info("🛑 Payment Service shutdown")
 
 app = FastAPI(
-    title="Payment Service",
-    description="Payment Processing Service",
-    version="1.0.0",
+    title="EVENTIX Payment Service",
+    description="Payment processing and refund management service",
+    version="2.0.0",
     lifespan=lifespan
 )
 
-models.Base.metadata.create_all(engine)
-
-def get_db():
-    db = SessionLocal()
-    try:
-        yield db
-    finally:
-        db.close()
-
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
-)
-logger = logging.getLogger(__name__)
-
-# Add CORS middleware
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # Configure appropriately for production
+    allow_origins=["*"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+@app.get("/health")
+async def health_check():
+    """Service health check"""
+    db_status = DatabaseManager.health_check()
+    cache_status = CacheManager.health_check()
+    
+    return {
+        "service": "payment-service",
+        "status": "healthy" if db_status else "unhealthy",
+        "database": "connected" if db_status else "disconnected",
+        "cache": "connected" if cache_status else "disconnected",
+        "version": "2.0.0"
+    }
+
+@app.get("/metrics")
+async def metrics():
+    """Service metrics"""
+    return {
+        "service": "payment-service",
+        "metrics": {
+            "total_payments": 0,
+            "successful_payments": 0,
+            "total_refunds": 0,
+            "processing_payments": 0
+        }
+    }
+
+@app.get("/")
+async def root():
+    """Service information"""
+    return {
+        "service": "EVENTIX Payment Service",
+        "version": "2.0.0",
+        "status": "running"
+    }
+
+def get_db():
+    return DatabaseManager.get_db()
 
 api_router = APIRouter(prefix="/api/v1")
 app.include_router(payment_routes.router)
@@ -120,10 +118,6 @@ async def log_requests(request: Request, call_next):
     )
     
     return response
-
-@app.get("/health")
-async def health_check():
-    return {"status": "healthy", "service": "payment-service"}
 
 # Global exception handler
 @app.exception_handler(Exception)

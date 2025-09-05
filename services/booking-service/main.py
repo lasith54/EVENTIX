@@ -1,6 +1,5 @@
 import sys
 import os
-sys.path.append(os.path.join(os.path.dirname(__file__), '..', '..'))
 
 import models
 from fastapi import FastAPI, Request, status, Depends, HTTPException, APIRouter
@@ -9,92 +8,93 @@ from fastapi.responses import JSONResponse
 from typing import Annotated, Dict, Any
 from sqlalchemy.orm import Session
 from contextlib import asynccontextmanager
-from database import engine, SessionLocal
 import logging
 from routes import booking_routes, saga_routes
 import time
 import asyncio
 
-from shared.rabbitmq_client import rabbitmq_client
-from shared.event_handler import BaseEventHandler
+# Add shared module to path
+sys.path.append(os.path.join(os.path.dirname(__file__), '../../shared'))
+from shared.database import DatabaseManager, CacheManager, create_all_tables
 
-import logging
+# Import your existing models
+from models import Booking, BookingSeat, SeatReservation
+
+logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
-
-from config import settings
-
-class BookingServiceEventHandler(BaseEventHandler):
-    def __init__(self):
-        super().__init__("booking-service")
-
-    async def handle_user_event(self, event_type: str, event_data: Dict[str, Any]):
-        if event_type == "created":
-            user_id = event_data['data']['user_id']
-            logger.info(f"Initialize booking preferences for user {user_id}")
-
-    async def handle_event_event(self, event_type: str, event_data: Dict[str, Any]):
-        if event_type == "created":
-            event_id = event_data['data']['event_id']
-            logger.info(f"Cache event details for booking: {event_id}")
-
-    async def handle_booking_event(self, event_type: str, event_data: Dict[str, Any]):
-        logger.info(f"Booking service received booking event: {event_type}")
-
-    async def handle_payment_event(self, event_type: str, event_data: Dict[str, Any]):
-        if event_type == "completed":
-            booking_id = event_data['data']['booking_id']
-            logger.info(f"Confirm booking {booking_id} - payment successful")
-            # TODO: Confirm booking and generate tickets
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # Setup RabbitMQ
-    await rabbitmq_client.connect()
-    await rabbitmq_client.setup_exchanges_and_queues("booking-service")
+    """Application lifespan management"""
+    logger.info("🚀 Starting Booking Service...")
     
-    # Start event handler
-    event_handler = BookingServiceEventHandler()
-    asyncio.create_task(
-        rabbitmq_client.start_consuming("booking-service", event_handler.handle_event)
-    )
+    try:
+        create_all_tables()
+        logger.info("✅ Database tables created/verified")
+    except Exception as e:
+        logger.error(f"❌ Database setup failed: {e}")
+        raise
     
-    logger.info("Booking service started successfully")
+    db_healthy = DatabaseManager.health_check()
+    if not db_healthy:
+        raise Exception("Database connection failed")
     
+    logger.info("✅ Booking Service startup complete")
     yield
-    
-    # Cleanup
-    await rabbitmq_client.disconnect()
+    logger.info("🛑 Booking Service shutdown")
 
 app = FastAPI(
-    title="Booking Service",
-    description="Ticket Booking Service",
-    version="1.0.0",
+    title="EVENTIX Booking Service",
+    description="Booking and reservation management service",
+    version="2.0.0",
     lifespan=lifespan
 )
 
-models.Base.metadata.create_all(engine)
-
-def get_db():
-    db = SessionLocal()
-    try:
-        yield db
-    finally:
-        db.close()
-
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
-)
-logger = logging.getLogger(__name__)
-
-# Add CORS middleware
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # Configure appropriately for production
+    allow_origins=["*"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+@app.get("/health")
+async def health_check():
+    """Service health check"""
+    db_status = DatabaseManager.health_check()
+    cache_status = CacheManager.health_check()
+    
+    return {
+        "service": "booking-service",
+        "status": "healthy" if db_status else "unhealthy",
+        "database": "connected" if db_status else "disconnected",
+        "cache": "connected" if cache_status else "disconnected",
+        "version": "2.0.0"
+    }
+
+@app.get("/metrics")
+async def metrics():
+    """Service metrics"""
+    return {
+        "service": "booking-service",
+        "metrics": {
+            "total_bookings": 0,
+            "active_reservations": 0,
+            "confirmed_bookings": 0
+        }
+    }
+
+@app.get("/")
+async def root():
+    """Service information"""
+    return {
+        "service": "EVENTIX Booking Service",
+        "version": "2.0.0",
+        "status": "running"
+    }
+
+def get_db():
+    return DatabaseManager.get_db()
 
 api_router = APIRouter(prefix="/api/v1")
 app.include_router(booking_routes.router)
@@ -120,10 +120,6 @@ async def log_requests(request: Request, call_next):
     )
     
     return response
-
-@app.get("/health")
-async def health_check():
-    return {"status": "healthy", "service": "booking-service"}
 
 # Global exception handler
 @app.exception_handler(Exception)

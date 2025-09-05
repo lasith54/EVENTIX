@@ -1,0 +1,68 @@
+# monitoring/prometheus.yml
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+
+rule_files:
+  # - "first_rules.yml"
+  # - "second_rules.yml"
+
+scrape_configs:
+  # Prometheus itself
+  - job_name: 'prometheus'
+    static_configs:
+      - targets: ['localhost:9090']
+
+  # API Gateway metrics
+  - job_name: 'api-gateway'
+    static_configs:
+      - targets: ['api-gateway:8080']
+    metrics_path: '/metrics'
+    scrape_interval: 10s
+
+  # User Service
+  - job_name: 'user-service'
+    static_configs:
+      - targets: ['user-service:8000']
+    metrics_path: '/metrics'
+    scrape_interval: 15s
+
+  # Event Service
+  - job_name: 'event-service'
+    static_configs:
+      - targets: ['event-service:8001']
+    metrics_path: '/metrics'
+    scrape_interval: 15s
+
+  # Booking Service
+  - job_name: 'booking-service'
+    static_configs:
+      - targets: ['booking-service:8002']
+    metrics_path: '/metrics'
+    scrape_interval: 15s
+
+  # Payment Service
+  - job_name: 'payment-service'
+    static_configs:
+      - targets: ['payment-service:8003']
+    metrics_path: '/metrics'
+    scrape_interval: 15s
+
+  # PostgreSQL Database
+  - job_name: 'postgres'
+    static_configs:
+      - targets: ['eventix-db:5432']
+    scrape_interval: 30s
+
+  # Redis Cache
+  - job_name: 'redis'
+    static_configs:
+      - targets: ['redis:6379']
+    scrape_interval: 30s
+
+  # Nginx Load Balancer
+  - job_name: 'nginx'
+    static_configs:
+      - targets: ['nginx:80']
+    metrics_path: '/nginx-health'
+    scrape_interval: 30s

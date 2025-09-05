@@ -1,358 +1,166 @@
-from sqlalchemy import Column, Integer, String, Text, DateTime, ForeignKey, Boolean, Numeric, Index
+# services/event-service/models.py
+
+from sqlalchemy import Column, Integer, String, Text, DateTime, Boolean, ForeignKey, JSON
+from sqlalchemy.types import Decimal
+from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
-from sqlalchemy import text
-from sqlalchemy.dialects.postgresql import UUID, JSONB, ENUM as SQLEnum
-from database import Base  # Your SQLAlchemy Base from database.py
-from enum import Enum
-import uuid
 from datetime import datetime
+import sys
+import os
 
-class ReservationStatus(str, Enum):
-    PENDING = "PENDING"
-    CONFIRMED = "CONFIRMED"
-    EXPIRED = "EXPIRED"
-    CANCELLED = "CANCELLED"
-    COMPLETED = "COMPLETED"
+# Add shared module to path
+sys.path.append(os.path.join(os.path.dirname(__file__), '../../shared'))
+from shared.database import Base
 
-class EventStatus(str, Enum):
-    DRAFT = "draft"
-    PUBLISHED = "published"
-    CANCELLED = "cancelled"
-    COMPLETED = "completed"
-    POSTPONED = "postponed"
-    SOLD_OUT = "sold_out"
-
-class EventType(str, Enum):
-    CONCERT = "concert"
-    SPORTS = "sports"
-    THEATER = "theater"
-    CONFERENCE = "conference"
-    COMEDY = "comedy"
-    EXHIBITION = "exhibition"
-    OTHER = "other"
-
-
-class SeatType(str, Enum):
-    REGULAR = "regular"
-    VIP = "vip"
-    PREMIUM = "premium"
-    WHEELCHAIR_ACCESSIBLE = "wheelchair_accessible"
-
-
-class VenueType(str, Enum):
-    STADIUM = "stadium"
-    ARENA = "arena"
-    THEATER = "theater"
-    CONCERT_HALL = "concert_hall"
-    CONFERENCE_CENTER = "conference_center"
-    OUTDOOR = "outdoor"
-    OTHER = "other"
-
-
-class SeatStatus(str, Enum):
-    AVAILABLE = "available"
-    RESERVED = "reserved"
-    OCCUPIED = "occupied"
-    BLOCKED = "blocked"
-    MAINTENANCE = "maintenance"
-
-
-class ReservationStatus(str, Enum):
-    PENDING = "pending"
-    CONFIRMED = "confirmed"
-    EXPIRED = "expired"
-    CANCELLED = "cancelled"
-    COMPLETED = "completed"
-
-# Database Models
 class Venue(Base):
-    __tablename__ = "venues"
+    __tablename__ = 'venues'
+    __table_args__ = {'schema': 'events'}
     
-    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4, index=True)
-    name = Column(String(255), nullable=False, index=True)
-    description = Column(Text, nullable=True)
-    venue_type = Column(SQLEnum(VenueType), nullable=False, index=True)
+    id = Column(Integer, primary_key=True, index=True)
+    name = Column(String(255), nullable=False)
     address = Column(Text, nullable=False)
-    city = Column(String(100), nullable=False, index=True)
-    state = Column(String(100), nullable=True)
-    country = Column(String(100), nullable=False, index=True)
-    postal_code = Column(String(20), nullable=True)
-    latitude = Column(Numeric(10, 8), nullable=True)
-    longitude = Column(Numeric(11, 8), nullable=True)
+    city = Column(String(100), nullable=False)
+    country = Column(String(100), nullable=False)
     capacity = Column(Integer, nullable=False)
-    image_urls = Column(JSONB, nullable=True)  # Array of image URLs
-    amenities = Column(JSONB, nullable=True)  # Array of amenities
-    contact_info = Column(JSONB, nullable=True)  # Contact details
-    is_active = Column(Boolean, default=True, nullable=False)
-    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
+    facilities = Column(JSON, default={})
+    created_at = Column(DateTime, server_default=func.now())
+    updated_at = Column(DateTime, server_default=func.now(), onupdate=func.now())
     
     # Relationships
-    sections = relationship("VenueSection", back_populates="venue", cascade="all, delete-orphan")
     events = relationship("Event", back_populates="venue")
-
-
-class VenueSection(Base):
-    __tablename__ = "venue_sections"
+    seat_sections = relationship("SeatSection", back_populates="venue", cascade="all, delete-orphan")
     
-    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4, index=True)
-    venue_id = Column(UUID(as_uuid=True), ForeignKey("venues.id"), nullable=False, index=True)
-    name = Column(String(100), nullable=False)  # e.g., "Section A", "VIP", "General Admission"
-    description = Column(Text, nullable=True)
-    capacity = Column(Integer, nullable=False)
-    seat_map = Column(JSONB, nullable=True)  # Detailed seat layout
-    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+    def __repr__(self):
+        return f"<Venue(id={self.id}, name='{self.name}')>"
     
-    # Relationships
-    venue = relationship("Venue", back_populates="sections")
-    pricing_tiers = relationship("EventPricingTier", back_populates="venue_section")
-    seats = relationship("Seat", back_populates="venue_section", cascade="all, delete-orphan")
-
-
-class EventCategory(Base):
-    __tablename__ = "event_categories"
-    
-    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4, index=True)
-    name = Column(String(100), nullable=False, unique=True, index=True)
-    description = Column(Text, nullable=True)
-    parent_id = Column(UUID(as_uuid=True), ForeignKey("event_categories.id"), nullable=True)
-    is_active = Column(Boolean, default=True, nullable=False)
-    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
-    
-    # Self-referential relationship for category hierarchy
-    parent = relationship("EventCategory", remote_side=[id], backref="subcategories")
-    events = relationship("Event", back_populates="category")
-
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'name': self.name,
+            'address': self.address,
+            'city': self.city,
+            'country': self.country,
+            'capacity': self.capacity,
+            'facilities': self.facilities,
+            'created_at': self.created_at.isoformat() if self.created_at else None,
+            'updated_at': self.updated_at.isoformat() if self.updated_at else None
+        }
 
 class Event(Base):
-    __tablename__ = "events"
+    __tablename__ = 'events'
+    __table_args__ = {'schema': 'events'}
     
-    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4, index=True)
-    title = Column(String(255), nullable=False, index=True)
-    description = Column(Text, nullable=True)
-    short_description = Column(String(500), nullable=True)
-    event_type = Column(SQLEnum(EventType), nullable=False, index=True)
-    status = Column(SQLEnum(EventStatus), default=EventStatus.DRAFT, nullable=False, index=True)
-    
-    # Venue and Category
-    venue_id = Column(UUID(as_uuid=True), ForeignKey("venues.id"), nullable=False, index=True)
-    category_id = Column(UUID(as_uuid=True), ForeignKey("event_categories.id"), nullable=True, index=True)
-    
-    # Event Details
-    artist_performer = Column(String(255), nullable=True)
-    organizer = Column(String(255), nullable=True)
-    duration_minutes = Column(Integer, nullable=True)
-    age_restriction = Column(String(50), nullable=True)  # e.g., "18+", "All Ages"
-    
-    # Media
-    poster_image_url = Column(String(500), nullable=True)
-    banner_image_url = Column(String(500), nullable=True)
-    gallery_images = Column(JSONB, nullable=True)  # Array of image URLs
-    video_urls = Column(JSONB, nullable=True)  # Array of video URLs
-    
-    # SEO and metadata
-    slug = Column(String(255), nullable=True, unique=True, index=True)
-    tags = Column(JSONB, nullable=True)  # Array of tags for search
-    event_metadata = Column(JSONB, nullable=True)  # Additional flexible data
-    
-    # Timestamps
-    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
+    id = Column(Integer, primary_key=True, index=True)
+    title = Column(String(255), nullable=False)
+    description = Column(Text)
+    venue_id = Column(Integer, ForeignKey('events.venues.id'))
+    start_datetime = Column(DateTime, nullable=False, index=True)
+    end_datetime = Column(DateTime, nullable=False, index=True)
+    category = Column(String(100), index=True)
+    status = Column(String(50), default='active', index=True)
+    total_seats = Column(Integer, nullable=False)
+    available_seats = Column(Integer, nullable=False)
+    base_price = Column(Decimal(10, 2), nullable=False)
+    currency = Column(String(3), default='USD')
+    image_url = Column(Text)
+    tags = Column(JSON, default=[])
+    created_at = Column(DateTime, server_default=func.now())
+    updated_at = Column(DateTime, server_default=func.now(), onupdate=func.now())
     
     # Relationships
     venue = relationship("Venue", back_populates="events")
-    category = relationship("EventCategory", back_populates="events")
-    schedules = relationship("EventSchedule", back_populates="event", cascade="all, delete-orphan")
-    pricing_tiers = relationship("EventPricingTier", back_populates="event", cascade="all, delete-orphan")
-    seat_reservations = relationship("SeatReservation", back_populates="event", cascade="all, delete-orphan")
+    seats = relationship("Seat", back_populates="event", cascade="all, delete-orphan")
     
-    # Indexes
-    __table_args__ = (
-        Index('idx_event_venue_status', 'venue_id', 'status'),
-        Index('idx_event_type_status', 'event_type', 'status'),
-    )
+    def __repr__(self):
+        return f"<Event(id={self.id}, title='{self.title}')>"
+    
+    @property
+    def is_active(self):
+        return self.status == 'active' and self.start_datetime > datetime.utcnow()
+    
+    @property
+    def is_sold_out(self):
+        return self.available_seats <= 0
+    
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'title': self.title,
+            'description': self.description,
+            'venue_id': self.venue_id,
+            'start_datetime': self.start_datetime.isoformat() if self.start_datetime else None,
+            'end_datetime': self.end_datetime.isoformat() if self.end_datetime else None,
+            'category': self.category,
+            'status': self.status,
+            'total_seats': self.total_seats,
+            'available_seats': self.available_seats,
+            'base_price': float(self.base_price) if self.base_price else None,
+            'currency': self.currency,
+            'image_url': self.image_url,
+            'tags': self.tags,
+            'is_active': self.is_active,
+            'is_sold_out': self.is_sold_out,
+            'created_at': self.created_at.isoformat() if self.created_at else None,
+            'updated_at': self.updated_at.isoformat() if self.updated_at else None
+        }
 
-
-class EventSchedule(Base):
-    __tablename__ = "event_schedules"
+class SeatSection(Base):
+    __tablename__ = 'seat_sections'
+    __table_args__ = {'schema': 'events'}
     
-    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4, index=True)
-    event_id = Column(UUID(as_uuid=True), ForeignKey("events.id"), nullable=False, index=True)
-    
-    # Schedule Details
-    start_datetime = Column(DateTime, nullable=False, index=True)
-    end_datetime = Column(DateTime, nullable=True, index=True)
-    doors_open_time = Column(DateTime, nullable=True)
-    timezone = Column(String(50), nullable=False, default="UTC")
-    
-    # Booking Details
-    booking_opens_at = Column(DateTime, nullable=True, index=True)
-    booking_closes_at = Column(DateTime, nullable=True, index=True)
-    early_bird_ends_at = Column(DateTime, nullable=True)
-    
-    # Status
-    is_cancelled = Column(Boolean, default=False, nullable=False)
-    cancellation_reason = Column(Text, nullable=True)
-    is_sold_out = Column(Boolean, default=False, nullable=False)
-    
-    # Notes
-    special_notes = Column(Text, nullable=True)
-    
-    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
+    id = Column(Integer, primary_key=True, index=True)
+    venue_id = Column(Integer, ForeignKey('events.venues.id'), nullable=False)
+    section_name = Column(String(100), nullable=False)
+    seat_count = Column(Integer, nullable=False)
+    price_multiplier = Column(Decimal(3, 2), default=1.00)
+    created_at = Column(DateTime, server_default=func.now())
     
     # Relationships
-    event = relationship("Event", back_populates="schedules")
+    venue = relationship("Venue", back_populates="seat_sections")
+    seats = relationship("Seat", back_populates="section")
     
-    # Indexes
-    __table_args__ = (
-        Index('idx_schedule_datetime', 'start_datetime', 'end_datetime'),
-        Index('idx_schedule_booking', 'booking_opens_at', 'booking_closes_at'),
-    )
-
-
-class EventPricingTier(Base):
-    __tablename__ = "event_pricing_tiers"
+    def __repr__(self):
+        return f"<SeatSection(id={self.id}, name='{self.section_name}')>"
     
-    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4, index=True)
-    event_id = Column(UUID(as_uuid=True), ForeignKey("events.id"), nullable=False, index=True)
-    venue_section_id = Column(UUID(as_uuid=True), ForeignKey("venue_sections.id"), nullable=False, index=True)
-    
-    # Pricing Details
-    tier_name = Column(String(100), nullable=False)  # e.g., "Early Bird", "Regular", "VIP"
-    price = Column(Numeric(10, 2), nullable=False)
-    currency = Column(String(3), nullable=False, default="USD")
-    
-    # Availability
-    total_seats = Column(Integer, nullable=False)
-    available_seats = Column(Integer, nullable=False)
-    min_purchase = Column(Integer, default=1, nullable=False)
-    max_purchase = Column(Integer, default=10, nullable=False)
-    
-    # Timing
-    sale_starts_at = Column(DateTime, nullable=True)
-    sale_ends_at = Column(DateTime, nullable=True)
-    
-    # Features
-    includes_benefits = Column(JSONB, nullable=True)  # Array of benefits
-    seat_type = Column(SQLEnum(SeatType), default=SeatType.REGULAR, nullable=False)
-    
-    # Status
-    is_active = Column(Boolean, default=True, nullable=False)
-    is_sold_out = Column(Boolean, default=False, nullable=False)
-    
-    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
-    
-    # Relationships
-    event = relationship("Event", back_populates="pricing_tiers")
-    venue_section = relationship("VenueSection", back_populates="pricing_tiers")
-    
-    # Indexes
-    __table_args__ = (
-        Index('idx_pricing_event_section', 'event_id', 'venue_section_id'),
-        Index('idx_pricing_sale_period', 'sale_starts_at', 'sale_ends_at'),
-    )
-
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'venue_id': self.venue_id,
+            'section_name': self.section_name,
+            'seat_count': self.seat_count,
+            'price_multiplier': float(self.price_multiplier) if self.price_multiplier else None,
+            'created_at': self.created_at.isoformat() if self.created_at else None
+        }
 
 class Seat(Base):
-    __tablename__ = "seats"
+    __tablename__ = 'seats'
+    __table_args__ = {'schema': 'events'}
     
-    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4, index=True)
-    venue_section_id = Column(UUID(as_uuid=True), ForeignKey("venue_sections.id"), nullable=False, index=True)
-    
-    # Seat Identification
-    row_number = Column(String(10), nullable=False)  # e.g., "A", "1", "AA"
-    seat_number = Column(String(10), nullable=False)  # e.g., "1", "12", "101"
-    seat_label = Column(String(20), nullable=True)    # e.g., "A1", "Row 1 Seat 12"
-    
-    # Seat Properties
-    seat_type = Column(SQLEnum(SeatType), default=SeatType.REGULAR, nullable=False)
-    status = Column(SQLEnum(SeatStatus), default=SeatStatus.AVAILABLE, nullable=False, index=True)
-    
-    # Physical Properties
-    x_coordinate = Column(Numeric(8, 4), nullable=True)  # For seat mapping visualization
-    y_coordinate = Column(Numeric(8, 4), nullable=True)  # For seat mapping visualization
-    is_accessible = Column(Boolean, default=False, nullable=False)
-    has_table = Column(Boolean, default=False, nullable=False)
-    
-    # Additional Properties
-    attributes = Column(JSONB, nullable=True)  # Flexible attributes (e.g., {"view": "stage", "amenities": ["cup_holder"]})
-    notes = Column(Text, nullable=True)
-    
-    # Status Management
-    blocked_reason = Column(Text, nullable=True)  # Reason if status is BLOCKED or MAINTENANCE
-    blocked_until = Column(DateTime, nullable=True)  # Temporary blocks
-    
-    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
+    id = Column(Integer, primary_key=True, index=True)
+    event_id = Column(Integer, ForeignKey('events.events.id'), nullable=False)
+    section_id = Column(Integer, ForeignKey('events.seat_sections.id'))
+    seat_number = Column(String(20), nullable=False)
+    row_number = Column(String(10))
+    is_available = Column(Boolean, default=True, index=True)
+    price = Column(Decimal(10, 2), nullable=False)
+    created_at = Column(DateTime, server_default=func.now())
     
     # Relationships
-    venue_section = relationship("VenueSection", back_populates="seats")
-    reservations = relationship("SeatReservation", back_populates="seat", cascade="all, delete-orphan")
+    event = relationship("Event", back_populates="seats")
+    section = relationship("SeatSection", back_populates="seats")
     
-    # Indexes and Constraints
-    __table_args__ = (
-        Index('idx_seat_type_status', 'seat_type', 'status'),
-        Index('idx_seat_status', 'status'),
-        Index('idx_unique_seat_per_section', 'venue_section_id', 'row_number', 'seat_number', unique=True),
-    )
-
-
-class SeatReservation(Base):
-    __tablename__ = "seat_reservations"
+    def __repr__(self):
+        return f"<Seat(id={self.id}, seat_number='{self.seat_number}', available={self.is_available})>"
     
-    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4, index=True)
-    seat_id = Column(UUID(as_uuid=True), ForeignKey("seats.id"), nullable=False, index=True)
-    event_id = Column(UUID(as_uuid=True), ForeignKey("events.id"), nullable=False, index=True)
-    
-    # Reservation Details
-    reservation_id = Column(String(100), nullable=False, unique=True, index=True)  # External booking reference
-    user_id = Column(UUID(as_uuid=True), nullable=True, index=True)  # User who made the reservation (from User Service)
-    status = Column(SQLEnum(ReservationStatus), default=ReservationStatus.PENDING, nullable=False, index=True)
-    
-    # Timing
-    reserved_at = Column(DateTime, default=datetime.utcnow, nullable=False)
-    expires_at = Column(DateTime, nullable=False, index=True)  # When this reservation expires
-    confirmed_at = Column(DateTime, nullable=True)
-    cancelled_at = Column(DateTime, nullable=True)
-    
-    # Pricing Information
-    reserved_price = Column(Numeric(10, 2), nullable=False)  # Price at time of reservation
-    currency = Column(String(3), nullable=False, default="USD")
-    pricing_tier_id = Column(UUID(as_uuid=True), ForeignKey("event_pricing_tiers.id"), nullable=True)
-    
-    # Additional Details
-    reservation_source = Column(String(50), nullable=True)  # e.g., "web", "mobile", "box_office", "api"
-    special_requirements = Column(JSONB, nullable=True)  # e.g., accessibility needs, dietary requirements
-    customer_notes = Column(Text, nullable=True)
-    internal_notes = Column(Text, nullable=True)
-    
-    # Metadata
-    reservation_metadata = Column(JSONB, nullable=True)  # Flexible data storage
-    
-    # Status History
-    status_changed_at = Column(DateTime, default=datetime.utcnow, nullable=False)
-    status_changed_by = Column(String(100), nullable=True)  # User ID or system identifier
-    cancellation_reason = Column(Text, nullable=True)
-    
-    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
-    
-    # Relationships
-    seat = relationship("Seat", back_populates="reservations")
-    event = relationship("Event", back_populates="seat_reservations")
-    pricing_tier = relationship("EventPricingTier")
-    
-    # Indexes
-    __table_args__ = (
-        Index('idx_reservation_seat_event', 'seat_id', 'event_id'),
-        Index('idx_reservation_status_expires', 'status', 'expires_at'),
-        Index('idx_reservation_user_status', 'user_id', 'status'),
-        Index('idx_reservation_event_status', 'event_id', 'status'),
-        Index('idx_reservation_expires_at', 'expires_at'),  # For cleanup jobs
-        # Prevent duplicate active reservations for same seat/event
-        Index('idx_unique_active_reservation', 'seat_id', 'event_id', 'status', 
-              postgresql_where=text("status IN ('PENDING', 'CONFIRMED')"))
-    )
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'event_id': self.event_id,
+            'section_id': self.section_id,
+            'seat_number': self.seat_number,
+            'row_number': self.row_number,
+            'is_available': self.is_available,
+            'price': float(self.price) if self.price else None,
+            'created_at': self.created_at.isoformat() if self.created_at else None
+        }

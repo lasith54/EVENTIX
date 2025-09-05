@@ -1,218 +1,167 @@
-from sqlalchemy import Column, Integer, String, DateTime, Boolean, Text, ForeignKey, Enum, DECIMAL
+# services/booking-service/models.py
+"""
+Booking Service Models - Updated for single database with schemas
+"""
+
+from sqlalchemy import Column, Integer, String, Text, DateTime, Boolean, ForeignKey
+from sqlalchemy.types import Decimal
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
-from datetime import datetime
-import enum
+from datetime import datetime, timedelta
+import sys
+import os
+import uuid
 
-Base = declarative_base()
-
-class BookingStatus(enum.Enum):
-    PENDING = "pending"
-    CONFIRMED = "confirmed"
-    CANCELLED = "cancelled"
-    EXPIRED = "expired"
-    REFUNDED = "refunded"
-
-class SagaTransactionStatus(enum.Enum):
-    STARTED = "started"
-    IN_PROGRESS = "in_progress"
-    COMPLETED = "completed"
-    FAILED = "failed"
-    COMPENSATING = "compensating"
-    COMPENSATED = "compensated"
-
-class SagaStepStatus(enum.Enum):
-    PENDING = "pending"
-    COMPLETED = "completed"
-    FAILED = "failed"
-    COMPENSATED = "compensated"
+# Add shared module to path
+sys.path.append(os.path.join(os.path.dirname(__file__), '../../shared'))
+from shared.database import Base
 
 class Booking(Base):
     __tablename__ = 'bookings'
+    __table_args__ = {'schema': 'bookings'}
     
-    id = Column(Integer, primary_key=True, autoincrement=True)
-    booking_reference = Column(String(50), unique=True, nullable=False, index=True)
-    user_id = Column(Integer, nullable=False, index=True)  # References user_service
-    event_id = Column(Integer, nullable=False, index=True)  # References event_service
-    
-    # Booking details
-    status = Column(Enum(BookingStatus), nullable=False, default=BookingStatus.PENDING)
-    total_amount = Column(DECIMAL(10, 2), nullable=False)
-    currency = Column(String(3), nullable=False, default='LKR')
-    
-    # Timestamps
-    booking_date = Column(DateTime(timezone=True), nullable=False, default=func.now())
-    expiry_date = Column(DateTime(timezone=True), nullable=True)
-    confirmed_at = Column(DateTime(timezone=True), nullable=True)
-    cancelled_at = Column(DateTime(timezone=True), nullable=True)
-    
-    # Additional details
-    special_requests = Column(Text, nullable=True)
-    booking_notes = Column(Text, nullable=True)
-    
-    # Contact information (cached from user service)
-    customer_email = Column(String(255), nullable=False)
-    customer_phone = Column(String(20), nullable=True)
-    customer_name = Column(String(100), nullable=False)
-    
-    # Metadata
-    created_at = Column(DateTime(timezone=True), nullable=False, default=func.now())
-    updated_at = Column(DateTime(timezone=True), nullable=False, default=func.now(), onupdate=func.now())
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey('users.users.id'), nullable=False, index=True)
+    event_id = Column(Integer, ForeignKey('events.events.id'), nullable=False, index=True)
+    booking_reference = Column(String(100), unique=True, nullable=False, index=True)
+    status = Column(String(50), default='pending', index=True)
+    total_amount = Column(Decimal(10, 2), nullable=False)
+    currency = Column(String(3), default='USD')
+    booking_date = Column(DateTime, server_default=func.now())
+    expiry_date = Column(DateTime)
+    payment_id = Column(Integer)
+    notes = Column(Text)
+    created_at = Column(DateTime, server_default=func.now())
+    updated_at = Column(DateTime, server_default=func.now(), onupdate=func.now())
     
     # Relationships
-    booking_items = relationship("BookingItem", back_populates="booking", cascade="all, delete-orphan")
-    saga_transactions = relationship("SagaTransaction", back_populates="booking")
-    status_history = relationship("BookingStatusHistory", back_populates="booking", cascade="all, delete-orphan")
+    booking_seats = relationship("BookingSeat", back_populates="booking", cascade="all, delete-orphan")
+    
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+        if not self.booking_reference:
+            self.booking_reference = self.generate_booking_reference()
+        if not self.expiry_date:
+            self.expiry_date = datetime.utcnow() + timedelta(minutes=15)  # 15 minute expiry
+    
+    @staticmethod
+    def generate_booking_reference():
+        """Generate unique booking reference"""
+        return f"BK{datetime.utcnow().strftime('%Y%m%d')}{str(uuid.uuid4())[:8].upper()}"
     
     def __repr__(self):
-        return f"<Booking(id={self.id}, reference={self.booking_reference}, status={self.status.value})>"
+        return f"<Booking(id={self.id}, reference='{self.booking_reference}', status='{self.status}')>"
+    
+    @property
+    def is_expired(self):
+        return datetime.utcnow() > self.expiry_date if self.expiry_date else False
+    
+    @property
+    def is_confirmed(self):
+        return self.status == 'confirmed'
+    
+    @property
+    def is_cancelled(self):
+        return self.status == 'cancelled'
+    
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'user_id': self.user_id,
+            'event_id': self.event_id,
+            'booking_reference': self.booking_reference,
+            'status': self.status,
+            'total_amount': float(self.total_amount) if self.total_amount else None,
+            'currency': self.currency,
+            'booking_date': self.booking_date.isoformat() if self.booking_date else None,
+            'expiry_date': self.expiry_date.isoformat() if self.expiry_date else None,
+            'payment_id': self.payment_id,
+            'notes': self.notes,
+            'is_expired': self.is_expired,
+            'is_confirmed': self.is_confirmed,
+            'is_cancelled': self.is_cancelled,
+            'created_at': self.created_at.isoformat() if self.created_at else None,
+            'updated_at': self.updated_at.isoformat() if self.updated_at else None
+        }
 
-class BookingItem(Base):
-    __tablename__ = 'booking_items'
+class BookingSeat(Base):
+    __tablename__ = 'booking_seats'
+    __table_args__ = {'schema': 'bookings'}
     
-    id = Column(Integer, primary_key=True, autoincrement=True)
-    booking_id = Column(Integer, ForeignKey('bookings.id'), nullable=False)
-    
-    # Item details (references to event service)
-    seat_id = Column(Integer, nullable=False, index=True)  # References event_service.seats
-    venue_section_id = Column(Integer, nullable=False, index=True)  # References event_service.venue_sections
-    
-    # Pricing information
-    unit_price = Column(DECIMAL(8, 2), nullable=False)
-    quantity = Column(Integer, nullable=False, default=1)
-    total_price = Column(DECIMAL(10, 2), nullable=False)
-    
-    # Cached information from event service
-    seat_row = Column(String(10), nullable=True)
-    seat_number = Column(String(10), nullable=True)
-    section_name = Column(String(100), nullable=False)
-    pricing_tier = Column(String(50), nullable=True)
-    
-    # Item status
-    is_cancelled = Column(Boolean, nullable=False, default=False)
-    cancelled_at = Column(DateTime(timezone=True), nullable=True)
-    cancellation_reason = Column(String(255), nullable=True)
-    
-    # Metadata
-    created_at = Column(DateTime(timezone=True), nullable=False, default=func.now())
-    updated_at = Column(DateTime(timezone=True), nullable=False, default=func.now(), onupdate=func.now())
+    id = Column(Integer, primary_key=True, index=True)
+    booking_id = Column(Integer, ForeignKey('bookings.bookings.id'), nullable=False)
+    seat_id = Column(Integer, ForeignKey('events.seats.id'), nullable=False)
+    price = Column(Decimal(10, 2), nullable=False)
+    created_at = Column(DateTime, server_default=func.now())
     
     # Relationships
-    booking = relationship("Booking", back_populates="booking_items")
+    booking = relationship("Booking", back_populates="booking_seats")
     
     def __repr__(self):
-        return f"<BookingItem(id={self.id}, seat_id={self.seat_id}, price={self.total_price})>"
+        return f"<BookingSeat(id={self.id}, booking_id={self.booking_id}, seat_id={self.seat_id})>"
+    
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'booking_id': self.booking_id,
+            'seat_id': self.seat_id,
+            'price': float(self.price) if self.price else None,
+            'created_at': self.created_at.isoformat() if self.created_at else None
+        }
 
-class SagaTransaction(Base):
-    __tablename__ = 'saga_transactions'
+class SeatReservation(Base):
+    __tablename__ = 'seat_reservations'
+    __table_args__ = {'schema': 'bookings'}
     
-    id = Column(Integer, primary_key=True, autoincrement=True)
-    saga_id = Column(String(100), unique=True, nullable=False, index=True)
-    booking_id = Column(Integer, ForeignKey('bookings.id'), nullable=False)
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey('users.users.id'), nullable=False)
+    seat_id = Column(Integer, ForeignKey('events.seats.id'), nullable=False)
+    booking_id = Column(Integer, ForeignKey('bookings.bookings.id'))
+    reserved_until = Column(DateTime, nullable=False, index=True)
+    status = Column(String(50), default='reserved', index=True)
+    created_at = Column(DateTime, server_default=func.now())
     
-    # Transaction details
-    transaction_type = Column(String(50), nullable=False)  # e.g., 'booking_creation', 'booking_cancellation'
-    status = Column(Enum(SagaTransactionStatus), nullable=False, default=SagaTransactionStatus.STARTED)
-    
-    # Timing
-    started_at = Column(DateTime(timezone=True), nullable=False, default=func.now())
-    completed_at = Column(DateTime(timezone=True), nullable=True)
-    failed_at = Column(DateTime(timezone=True), nullable=True)
-    
-    # Error handling
-    error_message = Column(Text, nullable=True)
-    retry_count = Column(Integer, nullable=False, default=0)
-    max_retries = Column(Integer, nullable=False, default=3)
-    
-    # Compensation data
-    compensation_data = Column(Text, nullable=True)  # JSON stored as text
-    
-    # Metadata
-    created_at = Column(DateTime(timezone=True), nullable=False, default=func.now())
-    updated_at = Column(DateTime(timezone=True), nullable=False, default=func.now(), onupdate=func.now())
-    
-    # Relationships
-    booking = relationship("Booking", back_populates="saga_transactions")
-    steps = relationship("SagaTransactionStep", back_populates="saga_transaction", cascade="all, delete-orphan")
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+        if not self.reserved_until:
+            self.reserved_until = datetime.utcnow() + timedelta(minutes=15)  # 15 minute reservation
     
     def __repr__(self):
-        return f"<SagaTransaction(id={self.id}, saga_id={self.saga_id}, status={self.status.value})>"
+        return f"<SeatReservation(id={self.id}, seat_id={self.seat_id}, status='{self.status}')>"
+    
+    @property
+    def is_expired(self):
+        return datetime.utcnow() > self.reserved_until
+    
+    @property
+    def is_active(self):
+        return self.status == 'reserved' and not self.is_expired
+    
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'user_id': self.user_id,
+            'seat_id': self.seat_id,
+            'booking_id': self.booking_id,
+            'reserved_until': self.reserved_until.isoformat() if self.reserved_until else None,
+            'status': self.status,
+            'is_expired': self.is_expired,
+            'is_active': self.is_active,
+            'created_at': self.created_at.isoformat() if self.created_at else None
+        }
 
-class SagaTransactionStep(Base):
-    __tablename__ = 'saga_transaction_steps'
-    
-    id = Column(Integer, primary_key=True, autoincrement=True)
-    saga_transaction_id = Column(Integer, ForeignKey('saga_transactions.id'), nullable=False)
-    
-    # Step details
-    step_name = Column(String(100), nullable=False)
-    step_order = Column(Integer, nullable=False)
-    service_name = Column(String(50), nullable=False)  # e.g., 'event_service', 'payment_service'
-    
-    # Step status and timing
-    status = Column(Enum(SagaStepStatus), nullable=False, default=SagaStepStatus.PENDING)
-    started_at = Column(DateTime(timezone=True), nullable=True)
-    completed_at = Column(DateTime(timezone=True), nullable=True)
-    failed_at = Column(DateTime(timezone=True), nullable=True)
-    compensated_at = Column(DateTime(timezone=True), nullable=True)
-    
-    # Request and response data
-    request_data = Column(Text, nullable=True)  # JSON stored as text
-    response_data = Column(Text, nullable=True)  # JSON stored as text
-    compensation_data = Column(Text, nullable=True)  # JSON stored as text
-    
-    # Error handling
-    error_message = Column(Text, nullable=True)
-    error_code = Column(String(50), nullable=True)
-    retry_count = Column(Integer, nullable=False, default=0)
-    
-    # Metadata
-    created_at = Column(DateTime(timezone=True), nullable=False, default=func.now())
-    updated_at = Column(DateTime(timezone=True), nullable=False, default=func.now(), onupdate=func.now())
-    
-    # Relationships
-    saga_transaction = relationship("SagaTransaction", back_populates="steps")
-    
-    def __repr__(self):
-        return f"<SagaTransactionStep(id={self.id}, step_name={self.step_name}, status={self.status.value})>"
+# Booking Status Enum
+class BookingStatus:
+    PENDING = 'pending'
+    CONFIRMED = 'confirmed'
+    CANCELLED = 'cancelled'
+    EXPIRED = 'expired'
+    REFUNDED = 'refunded'
 
-class BookingStatusHistory(Base):
-    __tablename__ = 'booking_status_history'
-    
-    id = Column(Integer, primary_key=True, autoincrement=True)
-    booking_id = Column(Integer, ForeignKey('bookings.id'), nullable=False)
-    
-    # Status change details
-    previous_status = Column(Enum(BookingStatus), nullable=True)
-    new_status = Column(Enum(BookingStatus), nullable=False)
-    changed_at = Column(DateTime(timezone=True), nullable=False, default=func.now())
-    
-    # Change context
-    changed_by = Column(String(100), nullable=True)  # User ID or system identifier
-    change_reason = Column(String(255), nullable=True)
-    change_notes = Column(Text, nullable=True)
-    
-    # Related transaction
-    saga_transaction_id = Column(Integer, ForeignKey('saga_transactions.id'), nullable=True)
-    
-    # Additional metadata
-    saga_metadata = Column(Text, nullable=True)  # JSON stored as text for additional context
-    
-    # Relationships
-    booking = relationship("Booking", back_populates="status_history")
-    
-    def __repr__(self):
-        return f"<BookingStatusHistory(id={self.id}, booking_id={self.booking_id}, status={self.new_status.value})>"
-
-# Additional utility methods can be added to models as needed
-def generate_booking_reference():
-    """Generate a unique booking reference"""
-    import uuid
-    import time
-    timestamp = str(int(time.time()))[-6:]  # Last 6 digits of timestamp
-    uuid_part = str(uuid.uuid4()).replace('-', '').upper()[:6]
-    return f"BK{timestamp}{uuid_part}"
-
-# Add this method to the Booking class
-Booking.generate_reference = staticmethod(generate_booking_reference)
+# Reservation Status Enum
+class ReservationStatus:
+    RESERVED = 'reserved'
+    CONFIRMED = 'confirmed'
+    EXPIRED = 'expired'
+    RELEASED = 'released'

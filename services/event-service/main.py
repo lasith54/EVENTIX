@@ -1,6 +1,5 @@
 import sys
 import os
-sys.path.append(os.path.join(os.path.dirname(__file__), '..', '..'))
 
 import models
 from fastapi import FastAPI, Request, status, Depends, HTTPException, APIRouter
@@ -9,96 +8,92 @@ from fastapi.responses import JSONResponse
 from typing import Annotated, Dict, Any
 from sqlalchemy.orm import Session
 from contextlib import asynccontextmanager
-from database import engine, SessionLocal
 import logging
 from routes import( events_routes, categories_routes, schedules_routes, pricing_routes, venue_routes,
                    utility_routes, seat_management_routes, seat_reservation_routes)
 import time
-import asyncio
 
-from config import settings
+# Add shared module to path
+sys.path.append(os.path.join(os.path.dirname(__file__), '../../shared'))
+from shared.database import DatabaseManager, CacheManager, create_all_tables
 
-# RabbitMQ imports
-from shared.rabbitmq_client import rabbitmq_client
-from shared.event_handler import BaseEventHandler
-
-import logging
+logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
-
-class EventServiceEventHandler(BaseEventHandler):
-    def __init__(self):
-        super().__init__("event-service")
-
-    async def handle_user_event(self, event_type: str, event_data: Dict[str, Any]):
-        if event_type == "created":
-            user_id = event_data['data']['user_id']
-            logger.info(f"New user {user_id} registered, update event recommendations")
-
-    async def handle_event_event(self, event_type: str, event_data: Dict[str, Any]):
-        logger.info(f"Event service received event: {event_type}")
-
-    async def handle_booking_event(self, event_type: str, event_data: Dict[str, Any]):
-        if event_type == "created":
-            event_id = event_data['data']['event_id']
-            seats_count = len(event_data['data'].get('seats', []))
-            logger.info(f"Seats reserved for event {event_id}: {seats_count} seats")
-            # TODO: Update seat availability
-
-    async def handle_payment_event(self, event_type: str, event_data: Dict[str, Any]):
-        if event_type == "completed":
-            booking_id = event_data['data']['booking_id']
-            logger.info(f"Payment completed for booking {booking_id}")
-            # TODO: Confirm seat reservation
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # Setup RabbitMQ
-    await rabbitmq_client.connect()
-    await rabbitmq_client.setup_exchanges_and_queues("event-service")
+    """Application lifespan management"""
+    logger.info("🚀 Starting Event Service...")
     
-    # Start event handler
-    event_handler = EventServiceEventHandler()
-    asyncio.create_task(
-        rabbitmq_client.start_consuming("event-service", event_handler.handle_event)
-    )
+    try:
+        create_all_tables()
+        logger.info("✅ Database tables created/verified")
+    except Exception as e:
+        logger.error(f"❌ Database setup failed: {e}")
+        raise
     
-    logger.info("Event service started successfully")
+    db_healthy = DatabaseManager.health_check()
+    cache_healthy = CacheManager.health_check()
     
+    if not db_healthy:
+        raise Exception("Database connection failed")
+    
+    logger.info("✅ Event Service startup complete")
     yield
-    
-    # Cleanup
-    await rabbitmq_client.disconnect()
+    logger.info("🛑 Event Service shutdown")
 
 app = FastAPI(
-    title="Event Service",
-    description="Event Management Service",
-    version="1.0.0",
+    title="EVENTIX Event Service",
+    description="Event and venue management service",
+    version="2.0.0",
     lifespan=lifespan
 )
 
-models.Base.metadata.create_all(engine)
-
-def get_db():
-    db = SessionLocal()
-    try:
-        yield db
-    finally:
-        db.close()
-
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
-)
-logger = logging.getLogger(__name__)
-
-# Add CORS middleware
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # Configure appropriately for production
+    allow_origins=["*"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+@app.get("/health")
+async def health_check():
+    """Service health check"""
+    db_status = DatabaseManager.health_check()
+    cache_status = CacheManager.health_check()
+    
+    return {
+        "service": "event-service",
+        "status": "healthy" if db_status else "unhealthy",
+        "database": "connected" if db_status else "disconnected",
+        "cache": "connected" if cache_status else "disconnected",
+        "version": "2.0.0"
+    }
+
+@app.get("/metrics")
+async def metrics():
+    """Service metrics"""
+    return {
+        "service": "event-service",
+        "metrics": {
+            "total_events": 0,
+            "active_events": 0,
+            "total_venues": 0
+        }
+    }
+
+@app.get("/")
+async def root():
+    """Service information"""
+    return {
+        "service": "EVENTIX Event Service",
+        "version": "2.0.0",
+        "status": "running"
+    }
+
+def get_db():
+    return DatabaseManager.get_db()
 
 api_router = APIRouter(prefix="/api/v1")
 api_router.include_router(events_routes.router)
@@ -130,10 +125,6 @@ async def log_requests(request: Request, call_next):
     )
     
     return response
-
-@app.get("/health")
-async def health_check():
-    return {"status": "healthy", "service": "event-service"}
 
 # Global exception handler
 @app.exception_handler(Exception)

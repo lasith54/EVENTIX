@@ -1,6 +1,5 @@
 import sys
 import os
-sys.path.append(os.path.join(os.path.dirname(__file__), '..', '..'))
 
 import models
 from fastapi import FastAPI, Request, status, Depends, HTTPException
@@ -9,135 +8,112 @@ from fastapi.responses import JSONResponse
 from typing import Annotated, Dict, Any
 from sqlalchemy.orm import Session
 from contextlib import asynccontextmanager
-from database import engine, SessionLocal, Base
-from admin import create_admin_user
 import logging
 from routes import (auth, preference_routes, notification_routes, session_routes)
+sys.path.append(os.path.join(os.path.dirname(__file__), '../../shared'))
+from shared.database import DatabaseManager, CacheManager, create_all_tables
 import time
-import asyncio
 
-from shared.rabbitmq_client import rabbitmq_client
-from shared.event_handler import BaseEventHandler
-
-from config import settings
-
-import logging
+# Logging setup
+logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
-
-class UserServiceEventHandler(BaseEventHandler):
-    def __init__(self):
-        super().__init__("user-service")
-
-    async def handle_user_event(self, event_type: str, event_data: Dict[str, Any]):
-        logger.info(f"User service received user event: {event_type}")
-        # User service doesn't typically handle its own events
-
-    async def handle_event_event(self, event_type: str, event_data: Dict[str, Any]):
-        if event_type == "created":
-            logger.info(f"New event created: {event_data['data'].get('title', 'Unknown')}")
-            # TODO: Send notifications to interested users
-
-    async def handle_booking_event(self, event_type: str, event_data: Dict[str, Any]):
-        if event_type == "created":
-            user_id = event_data['data']['user_id']
-            logger.info(f"Booking created for user {user_id}")
-            # TODO: Send booking confirmation email
-            
-        elif event_type == "confirmed":
-            user_id = event_data['data']['user_id']
-            logger.info(f"Booking confirmed for user {user_id}")
-
-    async def handle_payment_event(self, event_type: str, event_data: Dict[str, Any]):
-        if event_type == "completed":
-            user_id = event_data['data']['user_id']
-            logger.info(f"Payment completed for user {user_id}")
-            # TODO: Send payment receipt
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    """
-    Handles application startup and shutdown events.
-    """
-
-    models.Base.metadata.create_all(bind=engine)
+    """Application lifespan management"""
+    logger.info("🚀 Starting User Service...")
     
-    # Create a separate session for the startup task
-    db = SessionLocal()
+    # Create database tables
     try:
-        create_admin_user(
-            db,
-            admin_email="admin@eventix.com",
-            admin_password="admin",
-            admin_first_name="Admin",
-            admin_last_name="User"
-        )
-    finally:
-        db.close()
-    
-    print("Application shutting down...")
-
-    # Setup RabbitMQ
-    try:
-        await rabbitmq_client.connect()
-        await rabbitmq_client.setup_exchanges_and_queues("user-service")
-    
-
-        # Start event handler
-        event_handler = UserServiceEventHandler()
-        asyncio.create_task(
-            rabbitmq_client.start_consuming("user-service", event_handler.handle_event)
-        )
-        
-        logger.info("User service started successfully")
+        create_all_tables()
+        logger.info("✅ Database tables created/verified")
     except Exception as e:
-            logger.error(f"Error setting up RabbitMQ: {e}")
-            return
+        logger.error(f"❌ Database setup failed: {e}")
+        raise
+    
+    # Test connections
+    db_healthy = DatabaseManager.health_check()
+    cache_healthy = CacheManager.health_check()
+    
+    if not db_healthy:
+        logger.error("❌ Database connection failed")
+        raise Exception("Database connection failed")
+    
+    if not cache_healthy:
+        logger.warning("⚠️ Cache connection failed - continuing without cache")
+    
+    logger.info("✅ User Service startup complete")
     yield
-    
-    # Cleanup
-    logger.info("Application shutting down...")
-    try:
-        await rabbitmq_client.disconnect()
-    except Exception as e:
-        logger.error(f"Error during shutdown: {e}")
+    logger.info("🛑 User Service shutdown")
 
+# FastAPI application
 app = FastAPI(
-    title="User Service",
-    description="User Management and Authentication Service",
-    version="1.0.0",
+    title="EVENTIX User Service",
+    description="User management and authentication service",
+    version="2.0.0",
     lifespan=lifespan
 )
 
-def get_db():
-    db = SessionLocal()
-    try:
-        yield db
-    finally:
-        db.close()
-
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
-)
-logger = logging.getLogger(__name__)
-
-# Add CORS middleware
+# CORS middleware
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # Configure appropriately for production
+    allow_origins=["*"],  # Configure for production
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
+# Health check endpoint
+@app.get("/health")
+async def health_check():
+    """Service health check"""
+    db_status = DatabaseManager.health_check()
+    cache_status = CacheManager.health_check()
+    
+    return {
+        "service": "user-service",
+        "status": "healthy" if db_status else "unhealthy",
+        "database": "connected" if db_status else "disconnected",
+        "cache": "connected" if cache_status else "disconnected",
+        "version": "2.0.0"
+    }
+
+# Metrics endpoint
+@app.get("/metrics")
+async def metrics():
+    """Service metrics for monitoring"""
+    return {
+        "service": "user-service",
+        "metrics": {
+            "active_users": 0,  # Implement actual metrics
+            "total_sessions": 0,
+            "database_connections": 0
+        }
+    }
+
+# Database dependency
+def get_db():
+    """Get database session"""
+    return DatabaseManager.get_db()
+
+# Root endpoint
+@app.get("/")
+async def root():
+    """Service information"""
+    return {
+        "service": "EVENTIX User Service",
+        "version": "2.0.0",
+        "status": "running",
+        "endpoints": {
+            "health": "/health",
+            "metrics": "/metrics",
+            "docs": "/docs"
+        }
+    }
 app.include_router(auth.router)
 app.include_router(preference_routes.router)
 app.include_router(notification_routes.router)
 app.include_router(session_routes.router)
-
-@app.get("/health")
-async def health_check():
-    return {"status": "healthy", "service": "user-service"}
 
 # Request logging middleware
 @app.middleware("http")

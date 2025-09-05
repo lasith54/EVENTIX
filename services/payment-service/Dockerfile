@@ -1,24 +1,37 @@
-FROM python:3.11-slim
+FROM python:3.12-slim
 
-# Set the working directory inside the container
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    PYTHONPATH=/app \
+    PIP_NO_CACHE_DIR=1 \
+    PIP_DISABLE_PIP_VERSION_CHECK=1
+
+RUN apt-get update && apt-get install -y \
+    curl \
+    gcc \
+    g++ \
+    && rm -rf /var/lib/apt/lists/*
+
 WORKDIR /app
 
-# Copy the requirements file to the working directory
-COPY services/payment-service/requirements.txt ./requirements.txt
+RUN groupadd -r appuser && useradd -r -g appuser appuser
 
-# Install the Python dependencies
+# Copy requirements and install dependencies
+COPY services/payment-service/requirements.txt ./requirements.txt
 RUN pip install --no-cache-dir -r requirements.txt
 
-COPY ../../shared ./shared
-COPY ../../mode.py ./mode.py
+# Copy shared modules first
+COPY shared/ ./shared/
 
-# Copy the application code to the working directory
-COPY services/payment-service/ .
+# Copy service-specific code
+COPY services/payment-service/ ./
 
-RUN ls -la /app/
+RUN chown -R appuser:appuser /app
+USER appuser
 
-# Expose the port on which the application will run
+HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
+    CMD curl -f http://localhost:8003/health || exit 1
+
 EXPOSE 8003
 
-# Run the FastAPI application using uvicorn server
 CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8003"]
