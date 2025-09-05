@@ -201,3 +201,8 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+
+.vscode/*
+!.vscode/settings.json
+!.vscode/launch.json
+!.vscode/tasks.json

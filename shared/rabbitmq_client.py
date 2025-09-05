@@ -1,143 +1,151 @@
-import sys
-import os
-sys.path.append(os.path.join(os.path.dirname(__file__), '..', '..'))
-
 import asyncio
 import json
 import logging
-from typing import Dict, Any, Callable, Optional
+from typing import Dict, Any, Callable, Optional, Any
 import aio_pika
-from aio_pika import Message, DeliveryMode, ExchangeType
-from aio_pika.abc import AbstractIncomingMessage
+from aio_pika import connect_robust, ExchangeType, Message
+from aio_pika.abc import AbstractConnection, AbstractChannel, AbstractExchange
 import os
 from datetime import datetime
 from mode import production
+from contextlib import asynccontextmanager
 
 logger = logging.getLogger(__name__)
 
 class RabbitMQClient:
     def __init__(self):
-        self.connection: Optional[aio_pika.Connection] = None
-        self.channel: Optional[aio_pika.Channel] = None
-        self.exchanges: Dict[str, aio_pika.Exchange] = {}
-        self.queues: Dict[str, aio_pika.Queue] = {}
+        self.connection: Optional[AbstractConnection] = None
+        self.channel: Optional[AbstractChannel] = None
+        self.exchanges: Dict[str, AbstractExchange] = {}
+        self.consumers: Dict[str, Callable] = {}
+        self.is_connected = False
         if production:
-            self.url = os.getenv('RABBITMQ_URL', 'amqp://eventix:eventix123@rabbitmq:5672/')
+            self.rabbitmq_url = 'amqp://eventix:eventix123@rabbitmq:5672/'
         else:
-            self.url = os.getenv('RABBITMQ_URL', 'amqp://eventix:eventix123@localhost:5672/')
+            self.rabbitmq_url = 'amqp://eventix:eventix123@localhost:5672/'
 
-    async def connect(self):
+    async def connect(self) -> None:
         """Establish connection to RabbitMQ"""
         try:
-            self.connection = await aio_pika.connect_robust(self.url)
+            self.connection = await connect_robust(self.rabbitmq_url)
             self.channel = await self.connection.channel()
-            await self.channel.set_qos(prefetch_count=1)
-            logger.info("Connected to RabbitMQ successfully")
-            return True
+            await self.channel.set_qos(prefetch_count=10)
+            self.is_connected = True
+            logger.info("Successfully connected to RabbitMQ")
         except Exception as e:
             logger.error(f"Failed to connect to RabbitMQ: {e}")
-            return False
+            raise
 
-    async def disconnect(self):
+    async def disconnect(self) -> None:
         """Close RabbitMQ connection"""
         if self.connection and not self.connection.is_closed:
             await self.connection.close()
+            self.is_connected = False
             logger.info("Disconnected from RabbitMQ")
 
-    async def setup_exchanges_and_queues(self, service_name: str):
-        """Setup exchanges and queues for the service"""
-        # Declare topic exchanges
-        exchanges = ["user.events", "event.events", "booking.events", "payment.events"]
-        for exchange_name in exchanges:
-            exchange = await self.channel.declare_exchange(
-                exchange_name, ExchangeType.TOPIC, durable=True
-            )
-            self.exchanges[exchange_name] = exchange
-            logger.info(f"Declared exchange: {exchange_name}")
+    async def declare_exchange(
+        self, 
+        exchange_name: str, 
+        exchange_type: ExchangeType = ExchangeType.TOPIC,
+        durable: bool = True
+    ) -> AbstractExchange:
+        """Declare an exchange"""
+        if not self.is_connected:
+            await self.connect()
+        
+        exchange = await self.channel.declare_exchange(
+            exchange_name, 
+            exchange_type, 
+            durable=durable
+        )
+        self.exchanges[exchange_name] = exchange
+        return exchange
 
-        # Declare service queue
-        queue_name = f"{service_name}.queue"
-        queue = await self.channel.declare_queue(queue_name, durable=True)
-        self.queues[queue_name] = queue
-        logger.info(f"Declared queue: {queue_name}")
-
-        # Setup bindings based on service
-        await self._setup_bindings(service_name, queue_name)
-
-    async def _setup_bindings(self, service_name: str, queue_name: str):
-        """Setup queue bindings based on service requirements"""
-        bindings = {
-            "user-service": [
-                ("booking.events", "booking.*"),
-                ("payment.events", "payment.*")
-            ],
-            "event-service": [
-                ("user.events", "user.*"),
-                ("booking.events", "booking.*"),
-                ("payment.events", "payment.*")
-            ],
-            "booking-service": [
-                ("user.events", "user.*"),
-                ("event.events", "event.*"),
-                ("payment.events", "payment.*")
-            ],
-            "payment-service": [
-                ("booking.events", "booking.*"),
-                ("event.events", "event.*")
-            ]
-        }
-
-        if service_name in bindings:
-            for exchange_name, routing_key in bindings[service_name]:
-                await self.queues[queue_name].bind(
-                    self.exchanges[exchange_name], routing_key=routing_key
-                )
-                logger.info(f"Bound {queue_name} to {exchange_name} with {routing_key}")
-
-    async def publish_event(self, exchange_name: str, routing_key: str, event_data: Dict[str, Any]):
-        """Publish an event to RabbitMQ"""
-        if exchange_name not in self.exchanges:
-            exchange = await self.channel.declare_exchange(
-                exchange_name, ExchangeType.TOPIC, durable=True
-            )
-            self.exchanges[exchange_name] = exchange
-
-        # Add metadata to event
-        event_data.update({
-            "timestamp": datetime.utcnow().isoformat(),
-            "event_id": event_data.get("event_id", f"evt_{int(datetime.utcnow().timestamp())}")
-        })
-
-        message_body = json.dumps(event_data).encode()
-        message = Message(
-            message_body,
-            delivery_mode=DeliveryMode.PERSISTENT,
-            content_type="application/json",
-            headers={
-                "service": event_data.get("service", "unknown"),
-                "event_type": routing_key,
-                "timestamp": event_data.get("timestamp"),
-            }
+    async def declare_queue(
+        self, 
+        queue_name: str, 
+        durable: bool = True,
+        exclusive: bool = False
+    ):
+        """Declare a queue"""
+        if not self.is_connected:
+            await self.connect()
+        
+        return await self.channel.declare_queue(
+            queue_name, 
+            durable=durable,
+            exclusive=exclusive
         )
 
-        await self.exchanges[exchange_name].publish(message, routing_key=routing_key)
-        logger.info(f"Published event {routing_key} to exchange {exchange_name}")
-
-    async def start_consuming(self, service_name: str, callback: Callable):
-        """Start consuming events from the service queue"""
-        queue_name = f"{service_name}.queue"
+    async def publish_message(
+        self, 
+        exchange_name: str, 
+        routing_key: str, 
+        message: Dict[str, Any],
+        message_id: str = None,
+        correlation_id: str = None
+    ) -> None:
+        """Publish a message to an exchange"""
+        if not self.is_connected:
+            await self.connect()
         
-        async def process_message(message: AbstractIncomingMessage):
-            try:
-                async with message.process():
-                    event_data = json.loads(message.body.decode())
-                    logger.info(f"[{service_name}] Received event: {message.routing_key}")
-                    await callback(message.routing_key, event_data)
-            except Exception as e:
-                logger.error(f"Error processing message in {service_name}: {e}")
+        if exchange_name not in self.exchanges:
+            await self.declare_exchange(exchange_name)
+        
+        exchange = self.exchanges[exchange_name]
+        
+        message_body = json.dumps(message, default=str).encode('utf-8')
+        
+        aio_message = Message(
+            message_body,
+            message_id=message_id,
+            correlation_id=correlation_id,
+            content_type='application/json'
+        )
+        
+        await exchange.publish(aio_message, routing_key=routing_key)
+        logger.info(f"Published message to {exchange_name} with routing key {routing_key}")
 
-        await self.queues[queue_name].consume(process_message)
-        logger.info(f"Started consuming events for {service_name}")
+    async def subscribe_to_queue(
+        self, 
+        queue_name: str, 
+        callback: Callable,
+        exchange_name: str = None,
+        routing_key: str = None
+    ) -> None:
+        """Subscribe to a queue and bind to exchange if provided"""
+        if not self.is_connected:
+            await self.connect()
+        
+        queue = await self.declare_queue(queue_name)
+        
+        if exchange_name and routing_key:
+            if exchange_name not in self.exchanges:
+                await self.declare_exchange(exchange_name)
+            
+            await queue.bind(self.exchanges[exchange_name], routing_key=routing_key)
+        
+        async def message_handler(message):
+            async with message.process():
+                try:
+                    body = json.loads(message.body.decode('utf-8'))
+                    await callback(body, message)
+                    logger.info(f"Successfully processed message from {queue_name}")
+                except Exception as e:
+                    logger.error(f"Error processing message from {queue_name}: {e}")
+                    raise
+        
+        await queue.consume(message_handler)
+        logger.info(f"Subscribed to queue: {queue_name}")
 
-# Global client instance
+    @asynccontextmanager
+    async def connection_context(self):
+        """Context manager for RabbitMQ connection"""
+        await self.connect()
+        try:
+            yield self
+        finally:
+            await self.disconnect()
+
+# Global RabbitMQ client instance
 rabbitmq_client = RabbitMQClient()

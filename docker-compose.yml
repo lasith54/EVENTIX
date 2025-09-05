@@ -1,7 +1,28 @@
+version: '3.8'
 name: eventix-api
 services:          
+  rabbitmq:
+    image: rabbitmq:3.13-management
+    hostname: rabbitmq
+    environment:
+      RABBITMQ_DEFAULT_USER: eventix
+      RABBITMQ_DEFAULT_PASS: eventix123
+      RABBITMQ_DEFAULT_VHOST: /
+    ports:
+      - "5672:5672"    # AMQP port
+      - "15672:15672"  # Management UI port
+    volumes:
+      - rabbitmq-data:/var/lib/rabbitmq
+    networks:
+      - net
+    healthcheck:
+      test: ["CMD", "rabbitmqctl", "status"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+
   user-db:
-    image: postgres:14.18
+    image: postgres:15
     environment:
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: postgres
@@ -20,7 +41,7 @@ services:
       start_period: 30s
 
   event-db:
-    image: postgres:14.18
+    image: postgres:15
     environment:
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: postgres
@@ -31,7 +52,7 @@ services:
       - event-db-data:/var/lib/postgresql/data
     networks:
       - net
-    healthcheck:
+    healthcheck: 
       test: ["CMD-SHELL", "pg_isready -U postgres -d event-db"]
       interval: 10s
       timeout: 5s
@@ -39,7 +60,7 @@ services:
       start_period: 30s
 
   booking-db:
-    image: postgres:14.18
+    image: postgres:15
     environment:
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: postgres
@@ -50,7 +71,7 @@ services:
       - booking-db-data:/var/lib/postgresql/data
     networks:
       - net
-    healthcheck:
+    healthcheck: 
       test: ["CMD-SHELL", "pg_isready -U postgres -d booking-db"]
       interval: 10s
       timeout: 5s
@@ -58,7 +79,7 @@ services:
       start_period: 30s
 
   payment-db:
-    image: postgres:14.18
+    image: postgres:15
     environment:
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: postgres
@@ -69,32 +90,12 @@ services:
       - payment-db-data:/var/lib/postgresql/data
     networks:
       - net
-    healthcheck:
+    healthcheck: 
       test: ["CMD-SHELL", "pg_isready -U postgres -d payment-db"]
       interval: 10s
       timeout: 5s
       retries: 5
       start_period: 30s
-
-  rabbitmq:
-    image: rabbitmq:3.13-management
-    hostname: rabbitmq
-    environment:
-      RABBITMQ_DEFAULT_USER: eventix
-      RABBITMQ_DEFAULT_PASS: eventix123
-      RABBITMQ_DEFAULT_VHOST: /
-    ports:
-      - "5672:5672"    # AMQP port
-      - "15672:15672"  # Management UI port
-    volumes:
-      - rabbitmq-data:/var/lib/rabbitmq
-    networks:
-      - net
-    healthcheck:
-      test: ["CMD", "rabbitmq-diagnostics", "ping"]
-      interval: 30s
-      timeout: 10s
-      retries: 5
 
   user-service:
     build:
@@ -173,7 +174,6 @@ services:
       EVENT_SERVICE_URL: http://event-service:8001
       BOOKING_SERVICE_URL: http://booking-service:8002
       PAYMENT_SERVICE_URL: http://payment-service:8003
-      JWT_SECRET: your-secret-key-here
     ports:
       - "8080:8080"
     depends_on:
