@@ -1,4 +1,4 @@
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000/api/v1';
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://api-gateway:8080/api/v1';
 
 export interface LoginRequest {
   email: string;
@@ -117,7 +117,7 @@ class AuthService {
     }
   }
 
-  private getToken(): string | null {
+  public getToken(): string | null {
     return localStorage.getItem('token');
   }
 
@@ -399,9 +399,23 @@ class AuthService {
     }
 
     try {
+      // Check token expiration before making request
+      const token = this.getToken();
+      if (token) {
+        const payload = JSON.parse(atob(token.split('.')[1]));
+        const now = Math.floor(Date.now() / 1000);
+        if (payload.exp && payload.exp < now) {
+          console.log('Token has expired');
+          this.clearAuth();
+          this.notifyAuthChange();
+          return false;
+        }
+      }
+
       await this.getCurrentUser();
       return true;
-    } catch {
+    } catch (error) {
+      console.error('Auth validation failed:', error);
       this.clearAuth();
       this.notifyAuthChange();
       return false;

@@ -1,4 +1,3 @@
-version: '3.8'
 name: eventix-api
 services:          
   rabbitmq:
@@ -100,7 +99,7 @@ services:
   user-service:
     build:
       context: .
-      dockerfile: ./services/user-service/Dockerfile
+      dockerfile: ./services/user_service/Dockerfile
     environment:
       DATABASE_URL: postgres://postgres:postgres@user-db:5432/user-db
       RABBITMQ_URL: amqp://eventix:eventix123@rabbitmq:5672/
@@ -117,7 +116,7 @@ services:
   event-service:
     build:
       context: .
-      dockerfile: ./services/event-service/Dockerfile
+      dockerfile: ./services/event_service/Dockerfile
     environment:
       DATABASE_URL: postgres://postgres:postgres@event-db:5432/event-db
       RABBITMQ_URL: amqp://eventix:eventix123@rabbitmq:5672/
@@ -134,7 +133,7 @@ services:
   booking-service:
     build:
       context: .
-      dockerfile: ./services/booking-service/Dockerfile
+      dockerfile: ./services/booking_service/Dockerfile
     environment:
       DATABASE_URL: postgres://postgres:postgres@booking-db:5432/booking-db
       RABBITMQ_URL: amqp://eventix:eventix123@rabbitmq:5672/
@@ -151,7 +150,7 @@ services:
   payment-service:
     build:
       context: .
-      dockerfile: ./services/payment-service/Dockerfile
+      dockerfile: ./services/payment_service/Dockerfile
     environment:
       DATABASE_URL: postgres://postgres:postgres@payment-db:5432/payment-db
       RABBITMQ_URL: amqp://eventix:eventix123@rabbitmq:5672/
@@ -183,6 +182,25 @@ services:
       - payment-service
     networks:
       - net
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    ports:
+      - "3000:80"
+    depends_on:
+      - api-gateway
+    networks:
+      - net
+    environment:
+      - REACT_APP_API_URL=http://localhost:8080/api
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost/"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 5s
 
 volumes:
     user-db-data:

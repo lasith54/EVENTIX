@@ -1,0 +1,295 @@
+# User Database
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: user-db
+  namespace: eventix
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: user-db
+  template:
+    metadata:
+      labels:
+        app: user-db
+    spec:
+      containers:
+      - name: postgres
+        image: postgres:15
+        env:
+        - name: POSTGRES_USER
+          value: "postgres"
+        - name: POSTGRES_PASSWORD
+          value: "postgres"
+        - name: POSTGRES_DB
+          value: "user-db"
+        ports:
+        - containerPort: 5432
+        volumeMounts:
+        - name: user-db-data
+          mountPath: /var/lib/postgresql/data
+        livenessProbe:
+          exec:
+            command: ["pg_isready", "-U", "postgres", "-d", "user-db"]
+          initialDelaySeconds: 30
+          periodSeconds: 10
+          timeoutSeconds: 5
+        readinessProbe:
+          exec:
+            command: ["pg_isready", "-U", "postgres", "-d", "user-db"]
+          initialDelaySeconds: 5
+          periodSeconds: 10
+          timeoutSeconds: 5
+      volumes:
+      - name: user-db-data
+        persistentVolumeClaim:
+          claimName: user-db-pvc
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: user-db
+  namespace: eventix
+spec:
+  selector:
+    app: user-db
+  ports:
+  - port: 5432
+    targetPort: 5432
+    nodePort: 30432
+  type: NodePort
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: user-db-pvc
+  namespace: eventix
+spec:
+  accessModes:
+  - ReadWriteOnce
+  resources:
+    requests:
+      storage: 5Gi
+---
+# Event Database
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: event-db
+  namespace: eventix
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: event-db
+  template:
+    metadata:
+      labels:
+        app: event-db
+    spec:
+      containers:
+      - name: postgres
+        image: postgres:15
+        env:
+        - name: POSTGRES_USER
+          value: "postgres"
+        - name: POSTGRES_PASSWORD
+          value: "postgres"
+        - name: POSTGRES_DB
+          value: "event-db"
+        ports:
+        - containerPort: 5432
+        volumeMounts:
+        - name: event-db-data
+          mountPath: /var/lib/postgresql/data
+        livenessProbe:
+          exec:
+            command: ["pg_isready", "-U", "postgres", "-d", "event-db"]
+          initialDelaySeconds: 30
+          periodSeconds: 10
+          timeoutSeconds: 5
+        readinessProbe:
+          exec:
+            command: ["pg_isready", "-U", "postgres", "-d", "event-db"]
+          initialDelaySeconds: 5
+          periodSeconds: 10
+          timeoutSeconds: 5
+      volumes:
+      - name: event-db-data
+        persistentVolumeClaim:
+          claimName: event-db-pvc
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: event-db
+  namespace: eventix
+spec:
+  selector:
+    app: event-db
+  ports:
+  - port: 5432
+    targetPort: 5432
+    nodePort: 30433
+  type: NodePort
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: event-db-pvc
+  namespace: eventix
+spec:
+  accessModes:
+  - ReadWriteOnce
+  resources:
+    requests:
+      storage: 5Gi
+---
+# Booking Database
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: booking-db
+  namespace: eventix
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: booking-db
+  template:
+    metadata:
+      labels:
+        app: booking-db
+    spec:
+      containers:
+      - name: postgres
+        image: postgres:15
+        env:
+        - name: POSTGRES_USER
+          value: "postgres"
+        - name: POSTGRES_PASSWORD
+          value: "postgres"
+        - name: POSTGRES_DB
+          value: "booking-db"
+        ports:
+        - containerPort: 5432
+        volumeMounts:
+        - name: booking-db-data
+          mountPath: /var/lib/postgresql/data
+        livenessProbe:
+          exec:
+            command: ["pg_isready", "-U", "postgres", "-d", "booking-db"]
+          initialDelaySeconds: 30
+          periodSeconds: 10
+          timeoutSeconds: 5
+        readinessProbe:
+          exec:
+            command: ["pg_isready", "-U", "postgres", "-d", "booking-db"]
+          initialDelaySeconds: 5
+          periodSeconds: 10
+          timeoutSeconds: 5
+      volumes:
+      - name: booking-db-data
+        persistentVolumeClaim:
+          claimName: booking-db-pvc
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: booking-db
+  namespace: eventix
+spec:
+  selector:
+    app: booking-db
+  ports:
+  - port: 5432
+    targetPort: 5432
+    nodePort: 30434
+  type: NodePort
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: booking-db-pvc
+  namespace: eventix
+spec:
+  accessModes:
+  - ReadWriteOnce
+  resources:
+    requests:
+      storage: 5Gi
+---
+# Payment Database
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: payment-db
+  namespace: eventix
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: payment-db
+  template:
+    metadata:
+      labels:
+        app: payment-db
+    spec:
+      containers:
+      - name: postgres
+        image: postgres:15
+        env:
+        - name: POSTGRES_USER
+          value: "postgres"
+        - name: POSTGRES_PASSWORD
+          value: "postgres"
+        - name: POSTGRES_DB
+          value: "payment-db"
+        ports:
+        - containerPort: 5432
+        volumeMounts:
+        - name: payment-db-data
+          mountPath: /var/lib/postgresql/data
+        livenessProbe:
+          exec:
+            command: ["pg_isready", "-U", "postgres", "-d", "payment-db"]
+          initialDelaySeconds: 30
+          periodSeconds: 10
+          timeoutSeconds: 5
+        readinessProbe:
+          exec:
+            command: ["pg_isready", "-U", "postgres", "-d", "payment-db"]
+          initialDelaySeconds: 5
+          periodSeconds: 10
+          timeoutSeconds: 5
+      volumes:
+      - name: payment-db-data
+        persistentVolumeClaim:
+          claimName: payment-db-pvc
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: payment-db
+  namespace: eventix
+spec:
+  selector:
+    app: payment-db
+  ports:
+  - port: 5432
+    targetPort: 5432
+    nodePort: 30435
+  type: NodePort
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: payment-db-pvc
+  namespace: eventix
+spec:
+  accessModes:
+  - ReadWriteOnce
+  resources:
+    requests:
+      storage: 5Gi

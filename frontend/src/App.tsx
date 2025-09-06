@@ -6,7 +6,10 @@ import SignUpPage from '@/pages/SignUpPage';
 import Dashboard from '@/pages/Dashboard';
 import EventsPage from '@/pages/EventsPage';
 import ProfilePage from '@/pages/ProfilePage';
+import BookingPage from '@/pages/BookingPage';
 import ProtectedRoute from '@/components/ProtectedRoute';
+import PaymentPage from '@/pages/PaymentPage';
+import PaymentSuccessPage from '@/pages/PaymentSuccessPage';
 import { authService } from '@/services/auth';
 
 function App() {
@@ -92,6 +95,18 @@ function App() {
               </ProtectedRoute>
             }
           />
+
+          <Route 
+            path="/booking/:eventId" 
+            element={
+              <ProtectedRoute>
+                <BookingPage />
+              </ProtectedRoute>
+            } 
+          />
+
+          <Route path="/payment/:bookingId" element={<PaymentPage />} />
+          <Route path="/payment/success" element={<PaymentSuccessPage />} />
           
           {/* Catch all route */}
           <Route 

@@ -1,0 +1,61 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: user-service
+  namespace: eventix
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: user-service
+  template:
+    metadata:
+      labels:
+        app: user-service
+    spec:
+      containers:
+      - name: user-service
+        image: eventix/user-service:latest
+        imagePullPolicy: Never
+        env:
+        - name: DATABASE_URL
+          value: "postgres://postgres:postgres@user-db:5432/user-db"
+        - name: RABBITMQ_URL
+          value: "amqp://eventix:eventix123@rabbitmq:5672/"
+        ports:
+        - containerPort: 8000
+        livenessProbe:
+          httpGet:
+            path: /
+            port: 8000
+          initialDelaySeconds: 60
+          periodSeconds: 30
+          timeoutSeconds: 10
+        readinessProbe:
+          httpGet:
+            path: /
+            port: 8000
+          initialDelaySeconds: 30
+          periodSeconds: 10
+          timeoutSeconds: 5
+      initContainers:
+      - name: wait-for-db
+        image: postgres:15
+        command: ['sh', '-c', 'until pg_isready -h user-db -p 5432; do echo waiting for database; sleep 2; done;']
+      - name: wait-for-rabbitmq
+        image: rabbitmq:3.13-management
+        command: ['sh', '-c', 'until rabbitmqctl -H rabbitmq status; do echo waiting for rabbitmq; sleep 2; done;']
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: user-service
+  namespace: eventix
+spec:
+  selector:
+    app: user-service
+  ports:
+  - port: 8000
+    targetPort: 8000
+    nodePort: 30001
+  type: NodePort

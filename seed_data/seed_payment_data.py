@@ -58,7 +58,7 @@ def seed_payment_service(user_ids, booking_ids):
         session.flush()
         
         # Create payments
-        for i, booking_id in enumerate(booking_ids):
+        for i, booking_id in enumerate(booking_ids):            
             payment = Payment(
                 booking_id=booking_id,
                 user_id=user_ids[i],

@@ -80,6 +80,11 @@ const EventsPage: React.FC = () => {
     }
   };
 
+  // Single handleJoinEvent function - navigate to booking page
+  const handleJoinEvent = (eventId: string) => {
+    navigate(`/booking/${eventId}`);
+  };
+
   useEffect(() => {
     if (isSearching && searchQuery) {
       handleSearch(searchQuery, 1);
@@ -97,28 +102,6 @@ const EventsPage: React.FC = () => {
 
     return unsubscribe;
   }, []);
-
-  const handleJoinEvent = async (eventId: string) => {
-    try {
-      setJoiningEventId(eventId);
-      await eventService.joinEvent(eventId);
-      
-      // Refresh events to show updated attendee count
-      if (isSearching && searchQuery) {
-        await handleSearch(searchQuery, pagination.page);
-      } else {
-        const statusFilter = filter === 'all' ? undefined : filter;
-        await fetchEvents(statusFilter, pagination.page);
-      }
-      
-      alert('Successfully joined the event!');
-    } catch (err) {
-      console.error('Error joining event:', err);
-      alert(err instanceof Error ? err.message : 'Failed to join event');
-    } finally {
-      setJoiningEventId(null);
-    }
-  };
 
   const handleEventDetails = async (eventId: string) => {
     try {
@@ -158,6 +141,19 @@ const EventsPage: React.FC = () => {
     return event.status === 'published' && event.next_schedule;
   };
 
+  // Helper function to get available spots - fallback to capacity if available_spots doesn't exist
+  const getAvailableSpots = (event: EventListResponse): number => {
+    // Check if available_spots exists on the event object
+    if ('available_spots' in event && typeof event.available_spots === 'number') {
+      return event.available_spots;
+    }
+    // Fallback to capacity or a default value
+    if ('capacity' in event && typeof event.capacity === 'number') {
+      return event.capacity;
+    }
+    return 100; // Default fallback
+  };
+
   const formatDateTime = (dateString: string) => {
     return new Date(dateString).toLocaleString();
   };
@@ -190,7 +186,7 @@ const EventsPage: React.FC = () => {
   } : null;
 
   return (
-    <div className="min-h-screen bg-background">
+    <div className="min-h-screen bg-gradient-to-br from-yellow-50 via-background to-yellow-100/50">
       <Navbar user={navbarUser} isAuthenticated={true} />
 
       <main className="max-w-7xl mx-auto py-6 sm:px-6 lg:px-8">
@@ -288,99 +284,110 @@ const EventsPage: React.FC = () => {
           ) : (
             <>
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                {events.map((event) => (
-                  <div key={event.id} className="bg-card border border-border rounded-lg shadow-card hover:shadow-lg transition-shadow p-6">
-                    <div className="flex justify-between items-start mb-4">
-                      <h3 className="text-xl font-display font-semibold text-foreground">
-                        {event.title}
-                      </h3>
-                      <span className={`px-2 py-1 rounded-md text-xs font-medium ${getStatusColor(event.status)}`}>
-                        {getStatusText(event.status)}
-                      </span>
-                    </div>
-                    
-                    {event.poster_image_url && (
-                      <img 
-                        src={event.poster_image_url} 
-                        alt={event.title}
-                        className="w-full h-48 object-cover rounded-md mb-4"
-                      />
-                    )}
-                    
-                    <p className="text-muted-foreground mb-4 text-sm">
-                      {event.short_description || 'No description available'}
-                    </p>
-                    
-                    <div className="space-y-2 mb-4">
-                      {event.next_schedule && (
-                        <div className="flex items-center text-sm text-muted-foreground">
-                          <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
-                          </svg>
-                          {formatDateTime(event.next_schedule.start_datetime)}
-                        </div>
+                {events.map((event) => {
+                  const availableSpots = getAvailableSpots(event);
+                  
+                  return (
+                    <div key={event.id} className="bg-card border border-border rounded-lg shadow-card hover:shadow-lg transition-shadow p-6">
+                      <div className="flex justify-between items-start mb-4">
+                        <h3 className="text-xl font-display font-semibold text-foreground">
+                          {event.title}
+                        </h3>
+                        <span className={`px-2 py-1 rounded-md text-xs font-medium ${getStatusColor(event.status)}`}>
+                          {getStatusText(event.status)}
+                        </span>
+                      </div>
+                      
+                      {event.poster_image_url && (
+                        <img 
+                          src={event.poster_image_url} 
+                          alt={event.title}
+                          className="w-full h-48 object-cover rounded-md mb-4"
+                        />
                       )}
                       
-                      {event.venue && (
-                        <div className="flex items-center text-sm text-muted-foreground">
-                          <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
-                          </svg>
-                          {event.venue.name}, {event.venue.city}
-                        </div>
-                      )}
+                      <p className="text-muted-foreground mb-4 text-sm">
+                        {event.short_description || 'No description available'}
+                      </p>
                       
-                      {event.artist_performer && (
+                      <div className="space-y-2 mb-4">
+                        {event.next_schedule && (
+                          <div className="flex items-center text-sm text-muted-foreground">
+                            <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                            </svg>
+                            {formatDateTime(event.next_schedule.start_datetime)}
+                          </div>
+                        )}
+                        
+                        {event.venue && (
+                          <div className="flex items-center text-sm text-muted-foreground">
+                            <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
+                            </svg>
+                            {event.venue.name}, {event.venue.city}
+                          </div>
+                        )}
+                        
+                        {event.artist_performer && (
+                          <div className="flex items-center text-sm text-muted-foreground">
+                            <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                            </svg>
+                            {event.artist_performer}
+                          </div>
+                        )}
+
+                        {event.min_price && (
+                          <div className="flex items-center text-sm text-muted-foreground">
+                            <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1" />
+                            </svg>
+                            From ${event.min_price}
+                          </div>
+                        )}
+
+                        {/* Show available spots */}
                         <div className="flex items-center text-sm text-muted-foreground">
                           <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
                           </svg>
-                          {event.artist_performer}
+                          {availableSpots} spots available
                         </div>
-                      )}
 
-                      {event.min_price && (
-                        <div className="flex items-center text-sm text-muted-foreground">
-                          <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1" />
-                          </svg>
-                          From ${event.min_price}
-                        </div>
-                      )}
-
-                      {event.tags && event.tags.length > 0 && (
-                        <div className="flex flex-wrap gap-1 mt-2">
-                          {event.tags.slice(0, 3).map((tag, index) => (
-                            <span key={index} className="text-xs bg-primary/10 text-primary px-2 py-1 rounded">
-                              {tag}
-                            </span>
-                          ))}
-                          {event.tags.length > 3 && (
-                            <span className="text-xs text-muted-foreground">+{event.tags.length - 3} more</span>
-                          )}
-                        </div>
-                      )}
+                        {event.tags && event.tags.length > 0 && (
+                          <div className="flex flex-wrap gap-1 mt-2">
+                            {event.tags.slice(0, 3).map((tag, index) => (
+                              <span key={index} className="text-xs bg-primary/10 text-primary px-2 py-1 rounded">
+                                {tag}
+                              </span>
+                            ))}
+                            {event.tags.length > 3 && (
+                              <span className="text-xs text-muted-foreground">+{event.tags.length - 3} more</span>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                      
+                      <div className="flex space-x-2">
+                        <button
+                          onClick={() => handleJoinEvent(event.id)}
+                          disabled={availableSpots === 0}
+                          className="bg-primary text-primary-foreground px-4 py-2 rounded-md hover:bg-primary/90 disabled:opacity-50 disabled:cursor-not-allowed text-sm font-medium"
+                        >
+                          {availableSpots === 0 ? 'Sold Out' : 'Join Event'}
+                        </button>
+                        <button 
+                          onClick={() => handleEventDetails(event.id)}
+                          className="bg-secondary text-secondary-foreground py-2 px-4 rounded-md hover:bg-secondary/80 transition-colors text-sm font-medium"
+                        >
+                          Details
+                        </button>
+                      </div>
                     </div>
-                    
-                    <div className="flex space-x-2">
-                      <button 
-                        onClick={() => handleJoinEvent(event.id)}
-                        disabled={!isEventAvailable(event) || joiningEventId === event.id}
-                        className="flex-1 bg-primary text-primary-foreground py-2 px-4 rounded-md hover:bg-primary/90 transition-colors text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed"
-                      >
-                        {joiningEventId === event.id ? 'Joining...' : 
-                         !isEventAvailable(event) ? 'Not Available' : 'Join Event'}
-                      </button>
-                      <button 
-                        onClick={() => handleEventDetails(event.id)}
-                        className="bg-secondary text-secondary-foreground py-2 px-4 rounded-md hover:bg-secondary/80 transition-colors text-sm font-medium"
-                      >
-                        Details
-                      </button>
-                    </div>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
 
               {/* Pagination */}

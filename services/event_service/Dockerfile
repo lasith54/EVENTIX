@@ -4,7 +4,7 @@ FROM python:3.11-slim
 WORKDIR /app
 
 # Copy the requirements file to the working directory
-COPY services/event-service/requirements.txt ./requirements.txt
+COPY services/event_service/requirements.txt ./requirements.txt
 
 # Install the Python dependencies
 RUN pip install --no-cache-dir -r requirements.txt
@@ -13,7 +13,7 @@ COPY ../../shared ./shared
 COPY ../../mode.py ./mode.py
 
 # Copy the application code to the working directory
-COPY services/event-service/ .
+COPY services/event_service/ .
 
 RUN ls -la /app/
 

@@ -5,6 +5,20 @@ The system includes **User Service**, **Event Service**, **Booking Service**, **
 
 ---
 
+## ✨ Key Features
+
+- 🏗️ **Microservices Architecture** - Scalable, distributed system design
+- 🔐 **JWT Authentication** - Secure user authentication and authorization
+- 🎫 **Event Management** - Complete event lifecycle management
+- 💺 **Real-time Seat Booking** - Live seat availability and reservations
+- 💳 **Payment Processing** - Integrated payment gateway with transaction tracking
+- 🔄 **Saga Pattern** - Distributed transaction management
+- 📧 **Event-driven Architecture** - RabbitMQ message queuing
+- 🐳 **Docker Support** - Containerized deployment
+- 📊 **Database per Service** - Independent data storage per microservice
+
+---
+
 ## ⚡ Prerequisites
 
 - 🐍 Python 3.12+
@@ -22,56 +36,90 @@ The system includes **User Service**, **Event Service**, **Booking Service**, **
    git clone https://github.com/your-org/eventix-user-service.git
    cd eventix-user-service
    ```
-
-2. **Environment Setup**
-
-   **Option A: Full Docker Development**
+2. **Configure for production:**
    ```bash
-   # Change the production variable in mode.py
+   # Set production mode in mode.py
    production = True
+   ```
 
-   # Build and start all services with Docker
+3. **Start all services:**
+   ```bash
    docker-compose up --build -d
    ```
-   
-   **Option B: Hybrid Development (Databases in Docker, Services Local)**
-   ```bash
-   # 1. Start only databases and RabbitMQ
-   docker-compose up -d user-db event-db booking-db payment-db rabbitmq
+4. **Access the application:**
+   - 🌐 **API Gateway**: http://localhost:8080/docs
+   - 👤 **User Service**: http://localhost:8000/docs
+   - 🎫 **Event Service**: http://localhost:8001/docs
+   - 📝 **Booking Service**: http://localhost:8002/docs
+   - 💳 **Payment Service**: http://localhost:8003/docs
 
-   # 2. Create virtual environment for each service
+### Option B: Hybrid Development (Local Services)
+
+1. **Start infrastructure services:**
+   ```bash
+   docker-compose up -d user-db event-db booking-db payment-db rabbitmq
+   ```
+
+2. **Configure for development:**
+   ```bash
+   # Set development mode in mode.py
+   production = False
+   ```
+
+3. **Setup each service** (repeat for each service):
+   ```bash
+   # Create virtual environment
    python -m venv .venv
    .venv\Scripts\activate  # Windows
    # source .venv/bin/activate  # Linux/Mac
 
-   # 3. Install dependencies for each service
-   cd services/user-service
+   # Install dependencies
+   cd services/[service-name]
    pip install -r requirements.txt
-
-   # 4. Change the production variable in mode.py
-   production = False
-
-   # 5. Start services locally (in separate terminals)
-      # Terminal 1 - User Service
-      cd services/user-service
-      uvicorn main:app --host 0.0.0.0 --port 8000 --reload
-
-      # Terminal 2 - Event Service  
-      cd services/event-service
-      uvicorn main:app --host 0.0.0.0 --port 8001 --reload
-
-      # Terminal 3 - Booking Service
-      cd services/booking-service
-      uvicorn main:app --host 0.0.0.0 --port 8002 --reload
-
-      # Terminal 4 - Payment Service
-      cd services/payment-service
-      uvicorn main:app --host 0.0.0.0 --port 8003 --reload
-
-      # Terminal 5 - API Gateway
-      cd services/api-gateway
-      uvicorn main:app --host 0.0.0.0 --port 8080 --reload
    ```
+
+4. **Start services** (in separate terminals):
+   ```bash
+   # User Service (Terminal 1)
+   cd services/user-service && uvicorn main:app --host 0.0.0.0 --port 8000 --reload
+
+   # Event Service (Terminal 2)
+   cd services/event-service && uvicorn main:app --host 0.0.0.0 --port 8001 --reload
+
+   # Booking Service (Terminal 3)
+   cd services/booking-service && uvicorn main:app --host 0.0.0.0 --port 8002 --reload
+
+   # Payment Service (Terminal 4)
+   cd services/payment-service && uvicorn main:app --host 0.0.0.0 --port 8003 --reload
+
+   # API Gateway (Terminal 5)
+   cd services/api-gateway && uvicorn main:app --host 0.0.0.0 --port 8080 --reload
+   ```
+
+---
+
+## 🏗️ Architecture Overview
+
+### 🧩 Microservices
+
+| Service | Port | Database | Description |
+|---------|------|----------|-------------|
+| 🌐 **API Gateway** | 8080 | - | Single entry point, request routing, authentication |
+| 👤 **User Service** | 8000 | user-db:5432 | Authentication, user management, profiles |
+| 🎫 **Event Service** | 8001 | event-db:5433 | Event management, venues, pricing |
+| 📝 **Booking Service** | 8002 | booking-db:5434 | Seat reservations, booking management |
+| 💳 **Payment Service** | 8003 | payment-db:5435 | Payment processing, transactions |
+
+### 📡 API Endpoints
+
+**Via API Gateway (Recommended):**
+```
+http://localhost:8080/api/v1/auth/*      # Authentication
+http://localhost:8080/api/v1/users/*     # User management
+http://localhost:8080/api/v1/events/*    # Event operations
+http://localhost:8080/api/v1/bookings/*  # Booking operations
+http://localhost:8080/api/v1/payments/*  # Payment operations
+```
 
 ---
 
@@ -146,6 +194,44 @@ Eventix/
 
 ---
 
+## 🔐 Security & Authentication
+
+### 🛡️ Security Features
+- **JWT Authentication**: Stateless token-based authentication
+- **Role-based Access Control**: User/Admin role separation
+- **Centralized Authentication**: Token validation at API Gateway
+- **Session Management**: Active session tracking
+- **Database per Service**: Data isolation between services
+
+### 👑 Default Admin Access
+```
+Email: admin@eventix.com
+Password: admin123
+```
+*The admin user is automatically created when the user service starts.*
+
+---
+
+## 🗄️ Database Architecture
+
+### 📊 Database Per Service Pattern
+Each microservice maintains its own PostgreSQL database for data independence:
+
+| Database | Port | Service | Purpose |
+|----------|------|---------|---------|
+| **user-db** | 5432 | User Service | Users, profiles, sessions |
+| **event-db** | 5433 | Event Service | Events, venues, seats |
+| **booking-db** | 5434 | Booking Service | Bookings, reservations |
+| **payment-db** | 5435 | Payment Service | Payments, transactions |
+
+### 🔄 Data Consistency Patterns
+- **Event Sourcing**: All state changes captured as events
+- **Saga Pattern**: Distributed transaction coordination
+- **Eventual Consistency**: Cross-service data synchronization via events
+- **Message Queue**: RabbitMQ for reliable inter-service communication
+
+---
+
 ## 🎯 Core Features
 
 ### 🌐 API Gateway (Port 8080)
@@ -187,47 +273,6 @@ Eventix/
 - **Event Routes**: `/api/v1/events/*`
 - **Booking Routes**: `/api/v1/bookings/*`
 - **Payment Routes**: `/api/v1/payments/*`
-
-**Direct Service Access (Development):**
-- **🌐 API Gateway**: http://localhost:8080/docs
-- **👤 User Service**: http://localhost:8000/docs
-- **🎫 Event Service**: http://localhost:8001/docs  
-- **📝 Booking Service**: http://localhost:8002/docs
-- **💳 Payment Service**: http://localhost:8003/docs
----
-
-## 🗄️ Database Architecture
-
-### 📊 Database Per Service Pattern
-Each service has its own PostgreSQL database:
-
-- **user-db** (Port 5432): User accounts, profiles, sessions
-- **event-db** (Port 5433): Events, venues, seats, pricing
-- **booking-db** (Port 5434): Bookings, reservations, history
-- **payment-db** (Port 5435): Payments, transactions, refunds
-
-### 🔄 Data Consistency
-- **Event Sourcing**: All state changes are events
-- **Saga Pattern**: Distributed transaction management
-- **Eventual Consistency**: Cross-service data synchronization
-
----
-
-## 🔐 Security Features
-
-### 🛡️ Authentication & Authorization
-- **JWT Tokens**: Stateless authentication
-- **Role-Based Access**: User/Admin role separation
-- **Token Validation**: Centralized in API Gateway
-- **Session Management**: Active session tracking
-
-## 🔐 Default Admin Access
-
-**Admin Login:**
-- **Email**: `admin@eventix.com`
-- **Password**: `admin123`
-
-The admin user is automatically created when the user service starts.
 
 ---
 

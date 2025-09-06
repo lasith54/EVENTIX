@@ -6,7 +6,7 @@ from uuid import UUID
 from models import PaymentStatus, PaymentMethodType, TransactionType
 
 class PaymentCreate(BaseModel):
-    booking_id: UUID
+    booking_id: int
     payment_method_id: UUID
     amount: Decimal = Field(..., gt=0)
     currency: str = Field(..., min_length=3, max_length=3)
@@ -15,7 +15,7 @@ class PaymentCreate(BaseModel):
 
 class PaymentResponse(BaseModel):
     id: UUID
-    booking_id: UUID
+    booking_id: int
     user_id: UUID
     payment_method_id: UUID
     amount: Decimal

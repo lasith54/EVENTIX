@@ -37,7 +37,7 @@ class Payment(Base):
     __tablename__ = "payments"
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    booking_id = Column(UUID(as_uuid=True), nullable=False)
+    booking_id = Column(Integer, nullable=False)
     user_id = Column(UUID(as_uuid=True), nullable=False)
     payment_method_id = Column(UUID(as_uuid=True), ForeignKey("payment_methods.id"))
     amount = Column(DECIMAL(10, 2), nullable=False)

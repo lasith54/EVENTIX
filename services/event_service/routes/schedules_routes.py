@@ -69,6 +69,36 @@ async def create_schedule(
     await db.refresh(schedule)
     return schedule
 
+@router.get("/{event_id}/schedules", response_model=List[EventScheduleResponse])
+async def get_schedules_by_event(
+    event_id: uuid.UUID,
+    db: AsyncSession = Depends(get_async_db),
+    include_cancelled: bool = Query(False, description="Include cancelled schedules")
+):
+    """Get all schedules for a specific event"""
+    # Verify event exists
+    event_query = select(Event).where(Event.id == event_id)
+    event_result = await db.execute(event_query)
+    if not event_result.scalar_one_or_none():
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Event not found"
+        )
+    
+    # Build query for schedules
+    query = select(EventSchedule).where(EventSchedule.event_id == event_id)
+    
+    # Filter out cancelled schedules unless explicitly requested
+    if not include_cancelled:
+        query = query.where(EventSchedule.is_cancelled.is_(False))
+    
+    # Order by start_date_time
+    query = query.order_by(EventSchedule.start_datetime)
+    
+    result = await db.execute(query)
+    schedules = result.scalars().all()
+    
+    return schedules
 
 @router.put("/{schedule_id}", response_model=EventScheduleResponse, dependencies=[Depends(get_current_user)])
 async def update_schedule(

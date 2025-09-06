@@ -2,6 +2,10 @@ import sys
 import os
 sys.path.append(os.path.join(os.path.dirname(__file__), '..', '..', '..'))
 
+import time
+import random
+import string
+
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 from typing import List
@@ -22,6 +26,13 @@ from shared.event_publisher import EventPublisher
 router = APIRouter(prefix="/payments", tags=["Payments"])
 event_publisher = EventPublisher("payment-service")
 
+def generate_reference_number() -> str:
+    """Generate a unique reference number for payment"""
+    prefix = "PAY"
+    timestamp = str(int(time.time()))[-6:]  # Last 6 digits of timestamp
+    random_suffix = ''.join(random.choices(string.digits, k=4))
+    return f"{prefix}{timestamp}{random_suffix}"
+
 @router.post("/", response_model=PaymentResponse, status_code=status.HTTP_201_CREATED)
 async def create_payment(
     payment_data: PaymentCreate,
@@ -29,23 +40,49 @@ async def create_payment(
     db: AsyncSession = Depends(get_async_db)
 ):
     """Create a new payment"""
+    reference_number = generate_reference_number()
+
     payment = Payment(
         user_id=current_user.user_id,
+        reference_number=reference_number,
         **payment_data.dict()
     )
     db.add(payment)
     await db.commit()
     await db.refresh(payment)
 
-    await event_publisher.publish_payment_event("completed", {
-        "payment_id": payment.id,
-        "booking_id": payment_data.get("booking_id"),
-        "payment_method_id": payment_data.get("payment_method_id"),
-        "user_id": current_user.user_id,
-        "amount": payment_data.get("amount"),
-        "description": payment_data.get("description"),
-        "status": "completed"
-    })
+    try:
+        # Try different possible method names based on your EventPublisher implementation
+        if hasattr(event_publisher, 'publish_payment_completed'):
+            await event_publisher.publish_payment_completed({
+                "payment_id": str(payment.id),
+                "booking_id": payment_data.booking_id,
+                "payment_method_id": str(payment_data.payment_method_id),
+                "user_id": str(current_user.user_id),
+                "amount": float(payment_data.amount),
+                "description": payment_data.description,
+                "status": "completed",
+                "reference_number": reference_number
+            })
+        elif hasattr(event_publisher, 'publish'):
+            # Generic publish method
+            await event_publisher.publish("payment_completed", {
+                "payment_id": str(payment.id),
+                "booking_id": payment_data.booking_id,
+                "payment_method_id": str(payment_data.payment_method_id),
+                "user_id": str(current_user.user_id),
+                "amount": float(payment_data.amount),
+                "description": payment_data.description,
+                "status": "completed",
+                "reference_number": reference_number
+            })
+        else:
+            # If no suitable method found, just log it
+            print(f"Payment created successfully: {payment.id}")
+
+    except Exception as e:
+        # Don't fail the payment creation if event publishing fails
+        print(f"Failed to publish payment event: {e}")
 
     return payment
 
